@@ -95,11 +95,11 @@ spec:
                   approvalGates:
                     description: |-
                       ApprovalGates pause execution before specified events until human approval is recorded.
-                      Grant approval by annotating the AgentTeam: kubectl annotate agentteam <name> claude.camlabs.dev/approved/<event>=true
+                      Grant approval by annotating the AgentTeam: kubectl annotate agentteam <name> approved.claude.camlabs.dev/<event>=true
                     items:
                       description: |-
                         ApprovalGateSpec pauses execution before a named event until human approval is recorded.
-                        Approval is granted by adding the annotation claude.camlabs.dev/approved/{event}=true to the AgentTeam.
+                        Approval is granted by adding the annotation approved.claude.camlabs.dev/{event}=true to the AgentTeam.
                       properties:
                         channel:
                           default: none

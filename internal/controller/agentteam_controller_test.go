@@ -302,7 +302,7 @@ func TestReconcileInitializing_ApprovalGateBlocksTeammate(t *testing.T) {
 func TestReconcileInitializing_ApprovalGrantedViaAnnotation(t *testing.T) {
 	team := withRepo(minimalTeam("approved-team"))
 	team.Annotations = map[string]string{
-		"claude.camlabs.dev/approved/spawn-worker": "true",
+		"approved.claude.camlabs.dev/spawn-worker": "true",
 	}
 	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{
 		ApprovalGates: []claudev1alpha1.ApprovalGateSpec{
@@ -647,7 +647,7 @@ func TestCheckApprovalGate_GatePresentNotApproved(t *testing.T) {
 
 func TestCheckApprovalGate_ApprovedViaAnnotation(t *testing.T) {
 	team := minimalTeam("ag")
-	team.Annotations = map[string]string{"claude.camlabs.dev/approved/spawn-worker": "true"}
+	team.Annotations = map[string]string{"approved.claude.camlabs.dev/spawn-worker": "true"}
 	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{
 		ApprovalGates: []claudev1alpha1.ApprovalGateSpec{{Event: "spawn-worker", Channel: "none"}},
 	}
