@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/logo.png" alt="claude-teams-operator mascot" width="200" />
+
 # claude-teams-operator
 
 **A Kubernetes operator that runs Claude Code Agent Teams as distributed pods.**
