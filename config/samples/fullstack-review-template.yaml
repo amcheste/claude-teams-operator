@@ -38,4 +38,4 @@ spec:
     taskBackend: "shared-volume"
   lifecycle:
     timeout: "1h"
-    budgetLimit: "20.00"
+    budgetLimit: 20.00

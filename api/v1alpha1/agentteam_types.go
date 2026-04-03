@@ -188,7 +188,7 @@ type WorkspaceSpec struct {
 }
 
 // ApprovalGateSpec pauses execution before a named event until human approval is recorded.
-// Approval is granted by adding the annotation approved.claude.camlabs.dev/{event}=true to the AgentTeam.
+// Approval is granted by adding the annotation claude.camlabs.dev/approved/{event}=true to the AgentTeam.
 type ApprovalGateSpec struct {
 	// Event is the gate identifier. Use "spawn-{teammate-name}" to gate spawning a specific teammate.
 	Event string `json:"event"`
@@ -300,7 +300,7 @@ type LifecycleSpec struct {
 	PullRequest *PullRequestSpec `json:"pullRequest,omitempty"`
 
 	// ApprovalGates pause execution before specified events until human approval is recorded.
-	// Grant approval by annotating the AgentTeam: kubectl annotate agentteam <name> approved.claude.camlabs.dev/<event>=true
+	// Grant approval by annotating the AgentTeam: kubectl annotate agentteam <name> claude.camlabs.dev/approved/<event>=true
 	// +optional
 	ApprovalGates []ApprovalGateSpec `json:"approvalGates,omitempty"`
 }

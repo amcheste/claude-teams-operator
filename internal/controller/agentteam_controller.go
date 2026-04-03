@@ -23,40 +23,10 @@ import (
 	claudev1alpha1 "github.com/camlabs/claude-teams-operator/api/v1alpha1"
 )
 
-const (
-	defaultAgentImage = "ghcr.io/camlabs/claude-code-runner:latest"
-	defaultInitImage  = "alpine/git:latest"
-)
-
 // AgentTeamReconciler reconciles an AgentTeam object.
 type AgentTeamReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
-
-	// AgentImage overrides the default claude-code-runner image used for agent pods.
-	// Used in acceptance tests to substitute a lightweight no-op container.
-	AgentImage string
-
-	// InitImage overrides the default alpine/git image used for the repo init Job.
-	InitImage string
-
-	// SkipInitScript replaces the init Job's git-clone script with a no-op (exit 0).
-	// Used in acceptance tests where no real git repository is available.
-	SkipInitScript bool
-}
-
-func (r *AgentTeamReconciler) agentImage() string {
-	if r.AgentImage != "" {
-		return r.AgentImage
-	}
-	return defaultAgentImage
-}
-
-func (r *AgentTeamReconciler) initImage() string {
-	if r.InitImage != "" {
-		return r.InitImage
-	}
-	return defaultInitImage
 }
 
 // +kubebuilder:rbac:groups=claude.camlabs.dev,resources=agentteams,verbs=get;list;watch;create;update;patch;delete
@@ -423,14 +393,9 @@ echo "[init] Done"
 					RestartPolicy: corev1.RestartPolicyOnFailure,
 					Containers: []corev1.Container{
 						{
-							Name:  "init",
-							Image: r.initImage(),
-							Command: func() []string {
-								if r.SkipInitScript {
-									return []string{"sh", "-c", "exit 0"}
-								}
-								return []string{"sh", "-c", initScript}
-							}(),
+							Name:    "init",
+							Image:   "alpine/git:latest",
+							Command: []string{"sh", "-c", initScript},
 							Env:     envVars,
 							VolumeMounts: []corev1.VolumeMount{
 								{Name: "repo", MountPath: "/workspace"},
@@ -724,7 +689,7 @@ func (r *AgentTeamReconciler) buildAgentPod(
 			Containers: []corev1.Container{
 				{
 					Name:         "claude-code",
-					Image:        r.agentImage(),
+					Image:        "ghcr.io/camlabs/claude-code-runner:latest",
 					Env:          envVars,
 					VolumeMounts: volumeMounts,
 					Resources:    resources,
@@ -868,7 +833,7 @@ func (r *AgentTeamReconciler) checkApprovalGate(ctx context.Context, team *claud
 	}
 
 	// Check for the approval annotation.
-	annotationKey := "approved.claude.camlabs.dev/" + event
+	annotationKey := "claude.camlabs.dev/approved/" + event
 	if team.Annotations[annotationKey] == "true" {
 		return true, nil
 	}
