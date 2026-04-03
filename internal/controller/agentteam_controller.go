@@ -833,7 +833,7 @@ func (r *AgentTeamReconciler) checkApprovalGate(ctx context.Context, team *claud
 	}
 
 	// Check for the approval annotation.
-	annotationKey := "claude.camlabs.dev/approved/" + event
+	annotationKey := "approved.claude.camlabs.dev/" + event
 	if team.Annotations[annotationKey] == "true" {
 		return true, nil
 	}

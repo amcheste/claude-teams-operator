@@ -68,11 +68,8 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	Expect((&controller.AgentTeamReconciler{
-		Client:         mgr.GetClient(),
-		Scheme:         mgr.GetScheme(),
-		AgentImage:     "busybox:latest",
-		InitImage:      "busybox:latest",
-		SkipInitScript: true,
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr)).To(Succeed())
 
 	go func() {

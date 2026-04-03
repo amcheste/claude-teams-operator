@@ -171,7 +171,7 @@ Grant approval after reviewing the researcher's output:
 
 ```bash
 kubectl annotate agentteam q3-report \
-  "claude.camlabs.dev/approved/spawn-email-drafter=true" \
+  "approved.claude.camlabs.dev/spawn-email-drafter=true" \
   -n cowork-agents
 ```
 
@@ -258,7 +258,7 @@ kubectl get agentteam my-team -o jsonpath='{.status.teammates[*].pendingApproval
 
 # Grant approval
 kubectl annotate agentteam my-team \
-  "claude.camlabs.dev/approved/spawn-email-drafter=true"
+  "approved.claude.camlabs.dev/spawn-email-drafter=true"
 ```
 
 If `channel: webhook` is set, the operator POSTs a JSON payload to `webhookUrl` when the gate is triggered, allowing an external system to present the approval to a human and then apply the annotation.

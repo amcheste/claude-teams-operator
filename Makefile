@@ -112,6 +112,23 @@ helm-install: ## Install via Helm
 helm-uninstall: ## Uninstall Helm release
 	helm uninstall claude-teams-operator --namespace claude-teams-system
 
+##@ Testing
+
+ENVTEST_K8S_VERSION ?= 1.31
+SETUP_ENVTEST = $(shell go env GOPATH)/bin/setup-envtest
+
+.PHONY: test-integration
+test-integration: manifests generate envtest ## Run integration tests (requires KUBEBUILDER_ASSETS or calls setup-envtest)
+	KUBEBUILDER_ASSETS="$(shell $(SETUP_ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-path -p path)" \
+	go test ./internal/controller/... -tags=integration -v -count=1
+
+.PHONY: test-all
+test-all: test test-integration ## Run unit tests and integration tests
+
+.PHONY: envtest
+envtest: ## Install setup-envtest
+	@test -f $(SETUP_ENVTEST) || go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+
 ##@ Tools
 
 CONTROLLER_GEN = $(shell go env GOPATH)/bin/controller-gen
