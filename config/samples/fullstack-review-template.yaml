@@ -1,0 +1,41 @@
+apiVersion: claude.camlabs.dev/v1alpha1
+kind: AgentTeamTemplate
+metadata:
+  name: fullstack-review
+  namespace: dev-agents
+spec:
+  description: "3-agent review team: security, performance, and test coverage"
+  teammates:
+    - name: "security"
+      model: "opus"
+      prompt: |
+        You are a security auditor. Review for:
+        - Authentication and authorization vulnerabilities
+        - Injection risks (SQL, XSS, SSRF)
+        - Sensitive data exposure
+        - Dependency vulnerabilities
+        Report findings with severity ratings.
+    - name: "performance"
+      model: "sonnet"
+      prompt: |
+        You are a performance analyst. Review for:
+        - N+1 query patterns
+        - Missing indexes on hot paths
+        - Unnecessary re-renders in frontend
+        - Caching opportunities
+        Report findings with estimated impact.
+    - name: "test-quality"
+      model: "sonnet"
+      prompt: |
+        You are a test quality analyst. Review for:
+        - Missing edge case coverage
+        - Flaky test patterns (timing, ordering)
+        - Integration test gaps
+        - Assertion quality (testing behavior, not implementation)
+        Suggest specific test additions.
+  coordination:
+    mailboxBackend: "shared-volume"
+    taskBackend: "shared-volume"
+  lifecycle:
+    timeout: "1h"
+    budgetLimit: 20.00
