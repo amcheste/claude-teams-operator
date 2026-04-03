@@ -103,7 +103,7 @@ spec:
 
   lifecycle:
     timeout: "2h"
-    budgetLimit: 30.00
+    budgetLimit: "30.00"
     onComplete: "create-pr"
     pullRequest:
       targetBranch: "main"
