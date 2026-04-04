@@ -1,75 +1,70 @@
 # Testing
 
-## Running Tests
+The project has three test tiers. Run them in order from fastest to slowest:
+
+| Tier | Command | Requires | Speed |
+|------|---------|----------|-------|
+| Unit | `make test` | Nothing | ~1s |
+| Integration | `make test-integration` | `setup-envtest` binary | ~30s |
+| Acceptance | `make test-acceptance` | Kind cluster (`make acceptance-up`) | ~5–10 min |
+
+---
+
+## Unit Tests
+
+No cluster, no API server, no external dependencies. Uses controller-runtime's fake client (fully in-memory).
 
 ```bash
-# All tests
 make test
 
-# Unit tests only (fast, no cluster required)
-go test ./internal/controller/...
-
-# With verbose output
+# Verbose output
 go test ./internal/controller/... -v
 
-# Run a specific test
+# Run a single test
 go test ./internal/controller/... -run TestReconcilePending_CodingMode
 
-# With coverage report
-go test ./internal/controller/... -coverprofile=cover.out
-go tool cover -html=cover.out
+# Coverage report
+go test ./internal/controller/... -coverprofile=cover.out && go tool cover -html=cover.out
 ```
 
-## Test Structure
+### What is covered (36 tests)
 
-All tests live alongside the code they test:
-
-```
-internal/controller/
-  agentteam_controller.go       # Reconciler implementation
-  agentteam_controller_test.go  # Unit tests (36 tests)
-```
-
-Tests use [controller-runtime's fake client](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/client/fake) — a fully in-memory Kubernetes API server with no external dependencies. No Kind cluster, no real API server, no CRD installation required.
-
-## What Is Covered
-
-### Reconciler phases
+#### Reconciler phases
 
 | Test | What it verifies |
 |------|-----------------|
-| `TestReconcilePending_CodingMode_CreatesPVCsAndInitJob` | team-state PVC, repo PVC, and init Job are created in coding mode |
+| `TestReconcilePending_CodingMode_CreatesPVCsAndInitJob` | team-state PVC, repo PVC, and init Job created in coding mode |
 | `TestReconcilePending_CoworkMode_CreatesOutputPVC` | output PVC created; no repo PVC or init Job in Cowork mode |
 | `TestReconcilePending_Idempotent` | calling reconcilePending twice does not error |
 | `TestReconcileInitializing_WaitsForInitJob` | returns requeue when init Job is still running |
-| `TestReconcileInitializing_InitJobFailed_SetsFailedPhase` | sets `Failed` phase when init Job exhausts backoff |
+| `TestReconcileInitializing_InitJobFailed_SetsFailedPhase` | sets `Failed` when init Job exhausts backoff |
 | `TestReconcileInitializing_DeploysPods` | deploys lead and teammate pods after init Job succeeds |
 | `TestReconcileInitializing_DependsOnBlocks` | does not spawn a teammate whose `dependsOn` dep has not succeeded |
 | `TestReconcileInitializing_ApprovalGateBlocksTeammate` | blocks a gated teammate and sets `pendingApproval` |
-| `TestReconcileInitializing_ApprovalGrantedViaAnnotation` | spawns a gated teammate when the approval annotation is present |
-| `TestReconcileRunning_Timeout_SetsTimedOut` | sets `TimedOut` phase when elapsed time exceeds `lifecycle.timeout` |
+| `TestReconcileInitializing_ApprovalGrantedViaAnnotation` | spawns gated teammate when approval annotation is present |
+| `TestReconcileRunning_Timeout_SetsTimedOut` | sets `TimedOut` when elapsed time exceeds `lifecycle.timeout` |
 | `TestReconcileRunning_BudgetExceeded_SetsBudgetExceeded` | sets `BudgetExceeded` when estimated cost exceeds `lifecycle.budgetLimit` |
 | `TestReconcileRunning_AllPodsSucceeded_SetsCompleted` | sets `Completed` when lead and all teammates are `Succeeded` |
 | `TestReconcileRunning_PodFailed_SetsFailedPhase` | sets `Failed` when any pod enters `Failed` phase |
 | `TestReconcileRunning_SpawnsNewlyUnblockedTeammate` | spawns a teammate mid-run once its `dependsOn` dep completes |
 
-### Pod builder
+#### Pod builder
 
 | Test | What it verifies |
 |------|-----------------|
 | `TestBuildAgentPod_CodingMode` | correct env vars, `WORKTREE_PATH`, and volume mounts for coding mode |
 | `TestBuildAgentPod_LeadHasNoWorktreePath` | lead pod does not receive `WORKTREE_PATH` |
-| `TestBuildAgentPod_WithSkills` | skill ConfigMaps are mounted at `/var/claude-skills/{name}` |
-| `TestBuildAgentPod_WithMCPServers` | `mcp-config` volume is mounted at `/var/claude-mcp` |
+| `TestBuildAgentPod_WithSkills` | skill ConfigMaps mounted at `/var/claude-skills/{name}` |
+| `TestBuildAgentPod_WithMCPServers` | `mcp-config` volume mounted at `/var/claude-mcp` |
 | `TestBuildAgentPod_CoworkMode` | workspace-output and workspace-input volumes present; no repo volume |
 | `TestBuildAgentPod_ScopeEnvVars` | `SCOPE_INCLUDE_PATHS` and `SCOPE_EXCLUDE_PATHS` set from `scope` spec |
 
-### Business logic
+#### Business logic
 
 | Test | What it verifies |
 |------|-----------------|
 | `TestEstimateCost_ZeroWhenNoStartTime` | returns `"0.00"` when team has not started |
-| `TestEstimateCost_OpusMoreExpensiveThanSonnet` | opus cost > sonnet cost for the same elapsed time |
+| `TestEstimateCost_OpusMoreExpensiveThanSonnet` | opus cost > sonnet cost for same elapsed time |
 | `TestIsTimedOut_NotTimedOut` | returns false when elapsed < timeout |
 | `TestIsTimedOut_TimedOut` | returns true when elapsed > timeout |
 | `TestIsTimedOut_NoStartTime` | returns false when `startedAt` is unset |
@@ -81,58 +76,36 @@ Tests use [controller-runtime's fake client](https://pkg.go.dev/sigs.k8s.io/cont
 | `TestDependenciesMet_DepNotSpawned` | returns false when dependency pod does not exist |
 | `TestDependenciesMet_DepStillRunning` | returns false when dependency pod is `Running` |
 | `TestCheckApprovalGate_NoGateDefined` | returns approved when no gate matches the event |
-| `TestCheckApprovalGate_GatePresentNotApproved` | returns not approved when gate exists but annotation is absent |
-| `TestCheckApprovalGate_ApprovedViaAnnotation` | returns approved when the annotation is set to `"true"` |
+| `TestCheckApprovalGate_GatePresentNotApproved` | returns not approved when gate exists but annotation absent |
+| `TestCheckApprovalGate_ApprovedViaAnnotation` | returns approved when annotation is set to `"true"` |
 
-## Test Helpers
-
-The test file provides a set of composable helpers to reduce boilerplate:
+### Test helpers
 
 ```go
-// Build an AgentTeam with just enough fields to be valid.
-minimalTeam("my-team")
+minimalTeam("my-team")               // minimal valid AgentTeam
+withRepo(team)                        // add coding-mode repository config
+withWorkspace(team)                   // add Cowork-mode workspace config
+withLifecycle(team, "1h", "10.00")   // set timeout and budget
 
-// Add coding-mode repository config.
-withRepo(team)
-
-// Add Cowork-mode workspace config.
-withWorkspace(team)
-
-// Set lifecycle timeout and budget.
-withLifecycle(team, "1h", "10.00")
-
-// Create pre-built pod objects in various phases.
 succeededPod("my-team-lead", "default", "my-team")
 failedPod("my-team-lead", "default", "my-team")
 runningPod("my-team-lead", "default", "my-team")
 
-// Create pre-built Job objects.
 completedJob("my-team-init", "default")
 failedJob("my-team-init", "default")
+
+r := newReconciler(team, leadPod, workerPod)  // reconciler with pre-populated state
+team = fetch(t, r, "my-team")                 // fetch fresh copy with ResourceVersion set
 ```
 
-Create a reconciler with pre-populated objects:
+### Writing new unit tests
 
-```go
-r := newReconciler(team, leadPod, workerPod)
-```
-
-Fetch a fresh copy of an object from the fake client (includes the ResourceVersion set by the fake client, which is required for status update calls):
-
-```go
-team = fetch(t, r, "my-team")
-```
-
-## Writing New Tests
-
-Follow the existing patterns:
-
-1. **Build the initial state** using the helpers above.
-2. **Create the reconciler** with `newReconciler(objs...)`.
-3. **Fetch the team** with `fetch(t, r, name)` to get a properly initialised object.
-4. **Set any pre-existing status** directly on the fetched object (phase, startedAt, etc.).
-5. **Call the method under test** directly (e.g. `r.reconcilePending(ctx, team)`).
-6. **Assert both in-memory state** (the team object is mutated in place) and **cluster state** (use `r.Get` to verify created resources).
+1. Build the initial state using helpers above.
+2. Create the reconciler with `newReconciler(objs...)`.
+3. Fetch the team with `fetch(t, r, name)`.
+4. Set any pre-existing status directly on the fetched object.
+5. Call the method under test (e.g. `r.reconcilePending(ctx, team)`).
+6. Assert both in-memory state and cluster state via `r.Get`.
 
 ```go
 func TestMyNewScenario(t *testing.T) {
@@ -143,35 +116,106 @@ func TestMyNewScenario(t *testing.T) {
     _, err := r.reconcilePending(context.Background(), team)
     require.NoError(t, err)
 
-    // Assert in-memory phase change.
     assert.Equal(t, "Initializing", team.Status.Phase)
 
-    // Assert cluster resource was created.
     var pvc corev1.PersistentVolumeClaim
     require.NoError(t, r.Get(context.Background(),
         types.NamespacedName{Name: "my-team-team-state", Namespace: "default"}, &pvc))
 }
 ```
 
-## Integration Tests (Future)
+---
 
-Unit tests cover the reconciler logic against a fake client. Integration tests using [controller-runtime's envtest](https://book.kubebuilder.io/reference/envtest.html) are planned to cover the full reconcile loop against a real (in-process) API server, including:
+## Integration Tests
 
-- CRD installation and validation
-- Controller watch/trigger flow
-- Multi-step state transitions over multiple reconcile calls
-- Webhook validation
-
-To run envtest tests when they exist:
+Uses [controller-runtime envtest](https://book.kubebuilder.io/reference/envtest.html) — a real in-process API server with CRDs installed. Tests the full watch/reconcile loop over multiple reconcile cycles. No Kind cluster needed.
 
 ```bash
-# Download envtest binaries (first time only)
+# First time: install setup-envtest
 make envtest
 
-# Run with envtest
-KUBEBUILDER_ASSETS="$(./bin/setup-envtest use --bin-path)" go test ./internal/controller/... -tags=integration
+# Run all 25 integration tests
+make test-integration
 ```
 
-## CI
+### What is covered (25 specs across 6 Describe blocks)
 
-Tests run automatically on every PR via the `Lint` workflow in `.github/workflows/validate.yml`. PRs cannot be merged to `develop` without passing CI.
+| Block | Specs |
+|-------|-------|
+| Pending — coding mode | PVCs + init Job created, phase transitions, owner refs |
+| Pending — Cowork mode | output PVC only; no repo PVC or init Job |
+| Initializing | waits while Job running; Failed on Job failure; deploys pods; Running phase |
+| Running | Completed on all-succeeded; Failed on pod failure; completedAt stamped |
+| DependsOn | second teammate blocked until first pod Succeeded |
+| Approval gates | blocked + pendingApproval status; spawned after annotation |
+| CRD validation | invalid model enum rejected; empty teammates rejected |
+
+### Integration test helpers
+
+```go
+testNS()                                          // unique namespace + DeferCleanup
+waitForPhase(name, namespace, "Running")
+waitForPVC(name, namespace)
+waitForJob(name, namespace)
+waitForPod(name, namespace)
+completeJob(name, namespace)
+failJob(name, namespace)
+succeedPod(name, namespace)
+failPod(name, namespace)
+advanceThroughInit(name, namespace)               // complete init Job + wait for Running
+```
+
+---
+
+## Acceptance Tests
+
+Runs against a **real Kind cluster** with the operator deployed as a Kubernetes Deployment. Tests exercise actual RBAC, real image scheduling, and real pod lifecycle events. This is the release gate — it runs automatically on every PR from `develop` → `main`.
+
+### Local setup
+
+```bash
+# One-time: create Kind cluster + build + deploy operator
+make acceptance-up
+
+# Run all acceptance tests
+make test-acceptance
+
+# Tear down when done
+make acceptance-down
+```
+
+The operator is deployed with `--agent-image=busybox:latest --skip-init-script` so containers actually exit 0 (driving real phase transitions) without needing an Anthropic API key or a real git repository.
+
+### What is covered (test/acceptance/)
+
+| Block | Specs |
+|-------|-------|
+| Operator health | controller-manager deployment is ready |
+| CRD validation | invalid model rejected; empty teammates rejected |
+| Cowork mode lifecycle | team-state + output PVC; no repo PVC/init Job; pods deployed; Completed phase; completedAt |
+| Coding mode lifecycle | team-state + repo PVC + init Job; Initializing; pods deployed; Completed phase |
+| Failure handling | Failed on exhausted init Job backoff; Failed on pod failure |
+| DependsOn ordering | second teammate blocked until first pod Succeeded |
+| Approval gates | teammate blocked; spawned after approval annotation |
+| Owner references | PVCs and pods have correct owner references |
+| RBAC | operator can manage resources in arbitrary namespaces |
+
+### CI
+
+Acceptance tests run in `.github/workflows/acceptance.yml` on PRs to `main`. The workflow:
+1. Builds the operator Docker image
+2. Creates a Kind cluster
+3. Loads operator + busybox images into Kind
+4. Installs CRDs + RBAC + deploys operator in acceptance mode
+5. Runs `make test-acceptance`
+6. Collects operator logs on failure
+7. Deletes the Kind cluster
+
+---
+
+## CI Summary
+
+| Workflow | Trigger | Tests run |
+|----------|---------|-----------|
+| `validate.yml` | All PRs | Unit + Integration |
+| `acceptance.yml` | PRs to `main` | Acceptance (Kind) |
