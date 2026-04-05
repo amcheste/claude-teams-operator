@@ -160,7 +160,7 @@ func (r *AgentTeamReconciler) reconcilePending(ctx context.Context, team *claude
 	team.Status.Phase = "Initializing"
 	now := metav1.Now()
 	team.Status.StartedAt = &now
-	setCondition(team,metav1.ConditionTrue, "Initializing", "PVCs provisioned, init job started")
+	setCondition(team, metav1.ConditionTrue, "Initializing", "PVCs provisioned, init job started")
 	return ctrl.Result{RequeueAfter: 5 * time.Second}, r.Status().Update(ctx, team)
 }
 
@@ -176,7 +176,7 @@ func (r *AgentTeamReconciler) reconcileInitializing(ctx context.Context, team *c
 	if r.isTimedOut(team) {
 		log.Info("Team timed out during initialization")
 		team.Status.Phase = "TimedOut"
-		setCondition(team,metav1.ConditionFalse, "TimedOut", "Team exceeded configured timeout during initialization")
+		setCondition(team, metav1.ConditionFalse, "TimedOut", "Team exceeded configured timeout during initialization")
 		return ctrl.Result{}, r.Status().Update(ctx, team)
 	}
 
@@ -188,7 +188,7 @@ func (r *AgentTeamReconciler) reconcileInitializing(ctx context.Context, team *c
 		}
 		if failed {
 			team.Status.Phase = "Failed"
-			setCondition(team,metav1.ConditionFalse, "InitJobFailed", "Init job exceeded backoff limit")
+			setCondition(team, metav1.ConditionFalse, "InitJobFailed", "Init job exceeded backoff limit")
 			return ctrl.Result{}, r.Status().Update(ctx, team)
 		}
 		if !done {
@@ -221,7 +221,7 @@ func (r *AgentTeamReconciler) reconcileInitializing(ctx context.Context, team *c
 	}
 
 	team.Status.Phase = "Running"
-	setCondition(team,metav1.ConditionTrue, "Running", "Agent pods deployed")
+	setCondition(team, metav1.ConditionTrue, "Running", "Agent pods deployed")
 	return ctrl.Result{RequeueAfter: 30 * time.Second}, r.Status().Update(ctx, team)
 }
 
@@ -239,7 +239,7 @@ func (r *AgentTeamReconciler) reconcileRunning(ctx context.Context, team *claude
 			return ctrl.Result{}, err
 		}
 		team.Status.Phase = "TimedOut"
-		setCondition(team,metav1.ConditionFalse, "TimedOut", "Team exceeded configured timeout")
+		setCondition(team, metav1.ConditionFalse, "TimedOut", "Team exceeded configured timeout")
 		return ctrl.Result{}, r.Status().Update(ctx, team)
 	}
 
@@ -251,7 +251,7 @@ func (r *AgentTeamReconciler) reconcileRunning(ctx context.Context, team *claude
 			return ctrl.Result{}, err
 		}
 		team.Status.Phase = "BudgetExceeded"
-		setCondition(team,metav1.ConditionFalse, "BudgetExceeded", "Estimated cost exceeded budget limit")
+		setCondition(team, metav1.ConditionFalse, "BudgetExceeded", "Estimated cost exceeded budget limit")
 		return ctrl.Result{}, r.Status().Update(ctx, team)
 	}
 
@@ -291,7 +291,7 @@ func (r *AgentTeamReconciler) reconcileRunning(ctx context.Context, team *claude
 	}
 	if anyFailed {
 		team.Status.Phase = "Failed"
-		setCondition(team,metav1.ConditionFalse, "AgentFailed", "One or more agent pods failed")
+		setCondition(team, metav1.ConditionFalse, "AgentFailed", "One or more agent pods failed")
 		return ctrl.Result{}, r.Status().Update(ctx, team)
 	}
 	if allDone {
@@ -301,7 +301,7 @@ func (r *AgentTeamReconciler) reconcileRunning(ctx context.Context, team *claude
 			// Don't fail the team for post-completion actions.
 		}
 		team.Status.Phase = "Completed"
-		setCondition(team,metav1.ConditionFalse, "Completed", "All agents finished successfully")
+		setCondition(team, metav1.ConditionFalse, "Completed", "All agents finished successfully")
 		return ctrl.Result{}, r.Status().Update(ctx, team)
 	}
 
@@ -521,6 +521,9 @@ func (r *AgentTeamReconciler) ensureAgentPod(
 	}
 
 	pod = r.buildAgentPod(team, agentName, model, prompt, permissionMode, isLead, resources, scope, skills, mcpServers)
+	if err := ctrl.SetControllerReference(team, pod, r.Scheme); err != nil {
+		return err
+	}
 	return r.Create(ctx, pod)
 }
 
@@ -758,7 +761,6 @@ func (r *AgentTeamReconciler) buildAgentPod(
 		},
 	}
 
-	ctrl.SetControllerReference(team, pod, r.Scheme)
 	return pod
 }
 
