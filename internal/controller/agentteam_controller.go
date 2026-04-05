@@ -20,7 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	claudev1alpha1 "github.com/camlabs/claude-teams-operator/api/v1alpha1"
+	claudev1alpha1 "github.com/amcheste/claude-teams-operator/api/v1alpha1"
 )
 
 const (
@@ -43,6 +43,24 @@ type AgentTeamReconciler struct {
 	// SkipInitScript replaces the init Job's git-clone script with a no-op (exit 0).
 	// Used in acceptance tests where no real git repository is available.
 	SkipInitScript bool
+
+	// AgentCommand overrides the container command for agent pods.
+	// When empty the image's default entrypoint is used.
+	// In acceptance tests set to e.g. ["sh","-c","sleep 30 && exit 0"] so pods
+	// live long enough to be observed before the operator deletes them.
+	AgentCommand []string
+
+	// PVCAccessMode overrides the access mode used for all operator-managed PVCs.
+	// Defaults to ReadWriteMany (requires NFS/EFS). Set to ReadWriteOnce for
+	// single-node clusters such as Kind where all pods share the same node.
+	PVCAccessMode corev1.PersistentVolumeAccessMode
+}
+
+func (r *AgentTeamReconciler) pvcAccessMode() corev1.PersistentVolumeAccessMode {
+	if r.PVCAccessMode != "" {
+		return r.PVCAccessMode
+	}
+	return corev1.ReadWriteMany
 }
 
 func (r *AgentTeamReconciler) agentImage() string {
@@ -59,9 +77,9 @@ func (r *AgentTeamReconciler) initImage() string {
 	return defaultInitImage
 }
 
-// +kubebuilder:rbac:groups=claude.camlabs.dev,resources=agentteams,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=claude.camlabs.dev,resources=agentteams/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=claude.camlabs.dev,resources=agentteams/finalizers,verbs=update
+// +kubebuilder:rbac:groups=claude.amcheste.io,resources=agentteams,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=claude.amcheste.io,resources=agentteams/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=claude.amcheste.io,resources=agentteams/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
@@ -105,13 +123,13 @@ func (r *AgentTeamReconciler) reconcilePending(ctx context.Context, team *claude
 	log.Info("Phase: Pending")
 
 	// Always create the team-state PVC (holds .claude/teams/ and .claude/tasks/ for agent coordination).
-	if err := r.ensurePVC(ctx, team, teamStatePVCName(team), "nfs", corev1.ReadWriteMany, "1Gi"); err != nil {
+	if err := r.ensurePVC(ctx, team, teamStatePVCName(team), "nfs", r.pvcAccessMode(), "1Gi"); err != nil {
 		return ctrl.Result{}, fmt.Errorf("ensuring team-state PVC: %w", err)
 	}
 
 	// Coding mode: repo PVC + init Job to clone and create worktrees.
 	if team.Spec.Repository != nil && team.Spec.Repository.URL != "" {
-		if err := r.ensurePVC(ctx, team, repoPVCName(team), "nfs", corev1.ReadWriteMany, "10Gi"); err != nil {
+		if err := r.ensurePVC(ctx, team, repoPVCName(team), "nfs", r.pvcAccessMode(), "10Gi"); err != nil {
 			return ctrl.Result{}, fmt.Errorf("ensuring repo PVC: %w", err)
 		}
 		if err := r.ensureInitJob(ctx, team); err != nil {
@@ -134,7 +152,7 @@ func (r *AgentTeamReconciler) reconcilePending(ctx context.Context, team *claude
 		if sc == "" {
 			sc = "nfs"
 		}
-		if err := r.ensurePVC(ctx, team, pvcName, sc, corev1.ReadWriteMany, size); err != nil {
+		if err := r.ensurePVC(ctx, team, pvcName, sc, r.pvcAccessMode(), size); err != nil {
 			return ctrl.Result{}, fmt.Errorf("ensuring output PVC: %w", err)
 		}
 	}
@@ -559,8 +577,8 @@ func (r *AgentTeamReconciler) buildAgentPod(
 		"app.kubernetes.io/name":      "claude-teams-operator",
 		"app.kubernetes.io/instance":  team.Name,
 		"app.kubernetes.io/component": agentName,
-		"claude.camlabs.dev/team":     team.Name,
-		"claude.camlabs.dev/role":     role,
+		"claude.amcheste.io/team":     team.Name,
+		"claude.amcheste.io/role":     role,
 	}
 
 	envVars := []corev1.EnvVar{
@@ -725,6 +743,7 @@ func (r *AgentTeamReconciler) buildAgentPod(
 				{
 					Name:         "claude-code",
 					Image:        r.agentImage(),
+					Command:      r.AgentCommand,
 					Env:          envVars,
 					VolumeMounts: volumeMounts,
 					Resources:    resources,
@@ -868,7 +887,7 @@ func (r *AgentTeamReconciler) checkApprovalGate(ctx context.Context, team *claud
 	}
 
 	// Check for the approval annotation.
-	annotationKey := "approved.claude.camlabs.dev/" + event
+	annotationKey := "approved.claude.amcheste.io/" + event
 	if team.Annotations[annotationKey] == "true" {
 		return true, nil
 	}
@@ -1000,7 +1019,7 @@ func (r *AgentTeamReconciler) terminateAllPods(ctx context.Context, team *claude
 	podList := &corev1.PodList{}
 	if err := r.List(ctx, podList,
 		client.InNamespace(team.Namespace),
-		client.MatchingLabels{"claude.camlabs.dev/team": team.Name},
+		client.MatchingLabels{"claude.amcheste.io/team": team.Name},
 	); err != nil {
 		return err
 	}

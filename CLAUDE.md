@@ -98,7 +98,7 @@ Start with Phase 1 (PVC creation + init Job), then work through sequentially.
 
 ## API Group
 
-`claude.camlabs.dev/v1alpha1`
+`claude.amcheste.io/v1alpha1`
 
 ## Testing
 
@@ -109,3 +109,18 @@ Start with Phase 1 (PVC creation + init Job), then work through sequentially.
 ## License
 
 Apache 2.0 — CAM Labs LLC
+
+---
+
+## KubeCon NA 2026
+
+This project is being developed with the goal of presenting at KubeCon NA 2026 (November 9–12, Salt Lake City). See `KUBECON.md` for the full talk framing.
+
+**Ask of Claude Code:** As you build, please help capture the story. When you hit something non-obvious — a surprising constraint, a design tradeoff, an elegant solution, or something that broke in an unexpected way — add a short entry to the **"Interesting Problems Encountered"** section in `KUBECON.md`. One paragraph is enough. These notes become the raw material for the talk narrative and are the difference between a good proposal and a great one.
+
+Specifically worth logging:
+- Anything awkward about modeling long-running agent state in a K8s reconciler
+- Constraints imposed by the RWX PVC requirement
+- Tradeoffs in the budget estimation approach
+- Anything surprising about crash recovery / re-spawn behavior
+- Moments where K8s primitives (RBAC, ServiceAccounts, worktrees) solved a problem elegantly

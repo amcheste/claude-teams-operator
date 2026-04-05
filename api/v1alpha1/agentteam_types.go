@@ -1,6 +1,6 @@
 // Package v1alpha1 contains API Schema definitions for the claude v1alpha1 API group.
 // +kubebuilder:object:generate=true
-// +groupName=claude.camlabs.dev
+// +groupName=claude.amcheste.io
 package v1alpha1
 
 import (
@@ -82,7 +82,7 @@ type AuthSpec struct {
 // LeadSpec defines the team lead configuration.
 type LeadSpec struct {
 	// Model to use for the team lead.
-	// +kubebuilder:validation:Enum=opus;sonnet
+	// +kubebuilder:validation:Enum=opus;sonnet;haiku
 	// +kubebuilder:default="opus"
 	Model string `json:"model,omitempty"`
 
@@ -188,7 +188,7 @@ type WorkspaceSpec struct {
 }
 
 // ApprovalGateSpec pauses execution before a named event until human approval is recorded.
-// Approval is granted by adding the annotation approved.claude.camlabs.dev/{event}=true to the AgentTeam.
+// Approval is granted by adding the annotation approved.claude.amcheste.io/{event}=true to the AgentTeam.
 type ApprovalGateSpec struct {
 	// Event is the gate identifier. Use "spawn-{teammate-name}" to gate spawning a specific teammate.
 	Event string `json:"event"`
@@ -210,7 +210,7 @@ type TeammateSpec struct {
 	Name string `json:"name"`
 
 	// Model to use for this teammate.
-	// +kubebuilder:validation:Enum=opus;sonnet
+	// +kubebuilder:validation:Enum=opus;sonnet;haiku
 	// +kubebuilder:default="sonnet"
 	Model string `json:"model,omitempty"`
 
@@ -300,7 +300,7 @@ type LifecycleSpec struct {
 	PullRequest *PullRequestSpec `json:"pullRequest,omitempty"`
 
 	// ApprovalGates pause execution before specified events until human approval is recorded.
-	// Grant approval by annotating the AgentTeam: kubectl annotate agentteam <name> approved.claude.camlabs.dev/<event>=true
+	// Grant approval by annotating the AgentTeam: kubectl annotate agentteam <name> approved.claude.amcheste.io/<event>=true
 	// +optional
 	ApprovalGates []ApprovalGateSpec `json:"approvalGates,omitempty"`
 }

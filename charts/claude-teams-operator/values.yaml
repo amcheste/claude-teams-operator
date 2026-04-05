@@ -3,12 +3,12 @@
 replicaCount: 1
 
 image:
-  repository: ghcr.io/camlabs/claude-teams-operator
+  repository: ghcr.io/amcheste/claude-teams-operator
   tag: latest
   pullPolicy: IfNotPresent
 
 claudeCodeImage:
-  repository: ghcr.io/camlabs/claude-code-runner
+  repository: ghcr.io/amcheste/claude-code-runner
   tag: latest
   pullPolicy: IfNotPresent
 

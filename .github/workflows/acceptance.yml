@@ -34,10 +34,10 @@ jobs:
 
       # ── Build & load operator image ────────────────────────────────────────
       - name: Build operator image
-        run: docker build -t ghcr.io/camlabs/claude-teams-operator:acceptance -f docker/Dockerfile.operator .
+        run: docker build -t ghcr.io/amcheste/claude-teams-operator:acceptance -f docker/Dockerfile.operator .
 
       - name: Load operator image into Kind
-        run: kind load docker-image ghcr.io/camlabs/claude-teams-operator:acceptance --name claude-teams
+        run: kind load docker-image ghcr.io/amcheste/claude-teams-operator:acceptance --name claude-teams
 
       # Pull busybox so it's available in Kind nodes before tests start
       - name: Pre-pull busybox into Kind
@@ -65,7 +65,7 @@ jobs:
       - name: Set acceptance image and flags
         run: |
           kubectl set image deployment/controller-manager \
-            manager=ghcr.io/camlabs/claude-teams-operator:acceptance \
+            manager=ghcr.io/amcheste/claude-teams-operator:acceptance \
             -n claude-teams-system
 
           kubectl patch deployment controller-manager \
@@ -74,7 +74,9 @@ jobs:
             -p='[
               {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--agent-image=busybox:latest"},
               {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--init-image=busybox:latest"},
-              {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--skip-init-script"}
+              {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--skip-init-script"},
+              {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--pvc-access-mode=ReadWriteOnce"},
+              {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--agent-command=sh,-c,sleep 20 && exit 0"}
             ]'
 
       - name: Wait for operator to be ready
@@ -99,7 +101,7 @@ jobs:
           kubectl get agentteams -A -o wide || true
 
           echo "=== Pods in test namespaces ==="
-          kubectl get pods -A --selector='claude.camlabs.dev/team' || true
+          kubectl get pods -A --selector='claude.amcheste.io/team' || true
 
           echo "=== Recent events ==="
           kubectl get events -A --sort-by='.lastTimestamp' | tail -40 || true

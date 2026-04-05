@@ -13,8 +13,11 @@
 
 set -euo pipefail
 
+# Extend PATH to pick up Docker Desktop and Homebrew binaries.
+export PATH="/opt/homebrew/bin:/usr/local/bin:/Applications/Docker.app/Contents/Resources/bin:${PATH}"
+
 CLUSTER_NAME="${KIND_CLUSTER_NAME:-claude-teams}"
-IMG="${IMG:-ghcr.io/camlabs/claude-teams-operator:acceptance}"
+IMG="${IMG:-ghcr.io/amcheste/claude-teams-operator:acceptance}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
@@ -39,6 +42,22 @@ cd "${REPO_ROOT}" && make manifests --no-print-directory
 log "Installing CRDs"
 kubectl apply -f "${REPO_ROOT}/config/crd/bases/"
 
+# Kind uses local-path-provisioner which only exposes a 'standard' StorageClass.
+# Create an alias StorageClass named 'nfs' that uses the same provisioner so that
+# the operator's default team-state and repo PVCs (which request 'nfs') can bind.
+# On a single-node Kind cluster every pod shares one node, so hostPath volumes
+# are mountable by multiple pods simultaneously — the RWX behaviour we need.
+log "Creating 'nfs' StorageClass alias for Kind (backed by local-path-provisioner)"
+kubectl apply -f - <<'YAML'
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs
+provisioner: rancher.io/local-path
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+YAML
+
 log "Deploying RBAC"
 kubectl apply -f "${REPO_ROOT}/config/rbac/"
 
@@ -58,7 +77,9 @@ kubectl patch deployment controller-manager \
   -p='[
     {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--agent-image=busybox:latest"},
     {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--init-image=busybox:latest"},
-    {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--skip-init-script"}
+    {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--skip-init-script"},
+    {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--pvc-access-mode=ReadWriteOnce"},
+    {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--agent-command=sh,-c,sleep 20 && exit 0"}
   ]'
 
 log "Waiting for operator to be ready"

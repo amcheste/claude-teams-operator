@@ -131,7 +131,7 @@ test-acceptance: ## Run acceptance tests against a live cluster (requires accept
 
 .PHONY: acceptance-up
 acceptance-up: ## Create Kind cluster and deploy operator in acceptance mode (busybox agent + skip-init-script)
-	bash hack/acceptance-setup.sh
+	PATH="/opt/homebrew/bin:/usr/local/bin:$(PATH)" bash hack/acceptance-setup.sh
 
 .PHONY: acceptance-down
 acceptance-down: ## Tear down Kind acceptance cluster
