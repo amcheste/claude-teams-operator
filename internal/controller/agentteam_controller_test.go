@@ -77,7 +77,7 @@ func withWorkspace(team *claudev1alpha1.AgentTeam) *claudev1alpha1.AgentTeam {
 	return team
 }
 
-func withLifecycle(team *claudev1alpha1.AgentTeam, timeout, budget string) *claudev1alpha1.AgentTeam {
+func withLifecycle(team *claudev1alpha1.AgentTeam, timeout, budget string) *claudev1alpha1.AgentTeam { //nolint:unparam
 	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{
 		Timeout:     timeout,
 		BudgetLimit: &budget,
@@ -109,13 +109,13 @@ func failedPod(name, namespace, teamName string) *corev1.Pod {
 	return p
 }
 
-func runningPod(name, namespace, teamName string) *corev1.Pod {
+func runningPod(name, namespace, teamName string) *corev1.Pod { //nolint:unparam
 	p := succeededPod(name, namespace, teamName)
 	p.Status.Phase = corev1.PodRunning
 	return p
 }
 
-func completedJob(name, namespace string) *batchv1.Job {
+func completedJob(name, namespace string) *batchv1.Job { //nolint:unparam
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Status:     batchv1.JobStatus{Succeeded: 1},
@@ -629,9 +629,7 @@ func TestDependenciesMet_DepStillRunning(t *testing.T) {
 func TestCheckApprovalGate_NoGateDefined(t *testing.T) {
 	team := minimalTeam("ag")
 	r := newReconciler(team)
-	approved, err := r.checkApprovalGate(context.Background(), team, "spawn-worker")
-	require.NoError(t, err)
-	assert.True(t, approved)
+	assert.True(t, r.checkApprovalGate(context.Background(), team, "spawn-worker"))
 }
 
 func TestCheckApprovalGate_GatePresentNotApproved(t *testing.T) {
@@ -640,9 +638,7 @@ func TestCheckApprovalGate_GatePresentNotApproved(t *testing.T) {
 		ApprovalGates: []claudev1alpha1.ApprovalGateSpec{{Event: "spawn-worker", Channel: "none"}},
 	}
 	r := newReconciler(team)
-	approved, err := r.checkApprovalGate(context.Background(), team, "spawn-worker")
-	require.NoError(t, err)
-	assert.False(t, approved)
+	assert.False(t, r.checkApprovalGate(context.Background(), team, "spawn-worker"))
 }
 
 func TestCheckApprovalGate_ApprovedViaAnnotation(t *testing.T) {
@@ -652,9 +648,7 @@ func TestCheckApprovalGate_ApprovedViaAnnotation(t *testing.T) {
 		ApprovalGates: []claudev1alpha1.ApprovalGateSpec{{Event: "spawn-worker", Channel: "none"}},
 	}
 	r := newReconciler(team)
-	approved, err := r.checkApprovalGate(context.Background(), team, "spawn-worker")
-	require.NoError(t, err)
-	assert.True(t, approved)
+	assert.True(t, r.checkApprovalGate(context.Background(), team, "spawn-worker"))
 }
 
 // --- reconcileTerminal ---
@@ -908,7 +902,7 @@ func TestSyncPodStatuses_ReflectsPodPhases(t *testing.T) {
 	team = fetch(t, r, "sync-test")
 	ctx := context.Background()
 
-	require.NoError(t, r.syncPodStatuses(ctx, team))
+	r.syncPodStatuses(ctx, team)
 
 	require.NotNil(t, team.Status.Lead)
 	assert.Equal(t, "sync-test-lead", team.Status.Lead.PodName)
