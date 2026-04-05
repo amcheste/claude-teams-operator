@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.0
-  name: agentteams.claude.camlabs.dev
+  name: agentteams.claude.amcheste.io
 spec:
-  group: claude.camlabs.dev
+  group: claude.amcheste.io
   names:
     kind: AgentTeam
     listKind: AgentTeamList
@@ -139,6 +139,7 @@ spec:
                     enum:
                     - opus
                     - sonnet
+                    - haiku
                     type: string
                   permissionMode:
                     default: auto-accept
@@ -249,11 +250,11 @@ spec:
                   approvalGates:
                     description: |-
                       ApprovalGates pause execution before specified events until human approval is recorded.
-                      Grant approval by annotating the AgentTeam: kubectl annotate agentteam <name> approved.claude.camlabs.dev/<event>=true
+                      Grant approval by annotating the AgentTeam: kubectl annotate agentteam <name> approved.claude.amcheste.io/<event>=true
                     items:
                       description: |-
                         ApprovalGateSpec pauses execution before a named event until human approval is recorded.
-                        Approval is granted by adding the annotation approved.claude.camlabs.dev/{event}=true to the AgentTeam.
+                        Approval is granted by adding the annotation approved.claude.amcheste.io/{event}=true to the AgentTeam.
                       properties:
                         channel:
                           default: none
@@ -446,6 +447,7 @@ spec:
                       enum:
                       - opus
                       - sonnet
+                      - haiku
                       type: string
                     name:
                       description: Name is the unique identifier for this teammate.

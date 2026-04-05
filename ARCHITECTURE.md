@@ -134,14 +134,14 @@ Approval gates prevent a teammate from being spawned until a human explicitly ap
 When the reconciler would otherwise spawn a teammate, it first checks:
 
 1. Is there an `ApprovalGateSpec` for this event?
-2. If yes, does the `AgentTeam` have the annotation `approved.claude.camlabs.dev/{event}=true`?
+2. If yes, does the `AgentTeam` have the annotation `approved.claude.amcheste.io/{event}=true`?
 
 If the annotation is absent, the teammate is not spawned. The reconciler marks the teammate's `status.pendingApproval` field and (if `channel: webhook`) POSTs a notification to the configured URL so an external system can present the approval request to a human.
 
 Approval is granted by annotating the `AgentTeam`:
 
 ```bash
-kubectl annotate agentteam my-team "approved.claude.camlabs.dev/spawn-email-drafter=true"
+kubectl annotate agentteam my-team "approved.claude.amcheste.io/spawn-email-drafter=true"
 ```
 
 The next reconcile loop (within 30 seconds) sees the annotation and spawns the teammate.

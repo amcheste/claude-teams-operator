@@ -12,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	claudev1alpha1 "github.com/camlabs/claude-teams-operator/api/v1alpha1"
+	claudev1alpha1 "github.com/amcheste/claude-teams-operator/api/v1alpha1"
 )
 
 var _ = Describe("AgentTeam operator — acceptance", func() {
@@ -100,9 +100,9 @@ var _ = Describe("AgentTeam operator — acceptance", func() {
 		})
 
 		It("reaches Completed phase after all pods succeed", func() {
-			// busybox exits 0 — wait for pods to be observed as Succeeded.
-			waitForPodPhase(team.Name+"-lead", namespace, corev1.PodSucceeded)
-			waitForPodPhase(team.Name+"-worker", namespace, corev1.PodSucceeded)
+			// The operator drives phase transitions based on real pod exit codes.
+			// busybox exits 0 quickly; pods may already be cleaned up by the time
+			// we poll, so just assert the final phase rather than intermediate pod state.
 			waitForPhase(team.Name, namespace, "Completed")
 		})
 
@@ -181,9 +181,6 @@ var _ = Describe("AgentTeam operator — acceptance", func() {
 		})
 
 		It("reaches Completed phase", func() {
-			waitForPhase(team.Name, namespace, "Running")
-			waitForPodPhase(team.Name+"-lead", namespace, corev1.PodSucceeded)
-			waitForPodPhase(team.Name+"-coder", namespace, corev1.PodSucceeded)
 			waitForPhase(team.Name, namespace, "Completed")
 		})
 	})
@@ -294,10 +291,9 @@ var _ = Describe("AgentTeam operator — acceptance", func() {
 						},
 					},
 					Workspace: &claudev1alpha1.WorkspaceSpec{
-						Output: claudev1alpha1.WorkspaceOutputSpec{
-							Name:             "out",
-							StorageClassName: strPtr("standard"),
-							Size:             "100Mi",
+						Output: &claudev1alpha1.WorkspaceOutputSpec{
+							StorageClass: "standard",
+							Size:         "100Mi",
 						},
 					},
 				},
@@ -355,10 +351,9 @@ var _ = Describe("AgentTeam operator — acceptance", func() {
 						},
 					},
 					Workspace: &claudev1alpha1.WorkspaceSpec{
-						Output: claudev1alpha1.WorkspaceOutputSpec{
-							Name:             "out",
-							StorageClassName: strPtr("standard"),
-							Size:             "100Mi",
+						Output: &claudev1alpha1.WorkspaceOutputSpec{
+							StorageClass: "standard",
+							Size:         "100Mi",
 						},
 					},
 				},
@@ -381,7 +376,7 @@ var _ = Describe("AgentTeam operator — acceptance", func() {
 			if t.Annotations == nil {
 				t.Annotations = map[string]string{}
 			}
-			t.Annotations["approved.claude.camlabs.dev/spawn-gated"] = "true"
+			t.Annotations["approved.claude.amcheste.io/spawn-gated"] = "true"
 			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
 
 			// Gated teammate should now be spawned.

@@ -40,6 +40,56 @@ These are the angles that will make the talk land. When you hit one of these in 
 
 ---
 
+## Competitive Landscape — Gastown
+
+The closest comparable project is **Gas Town** and its Kubernetes operator. Understanding the distinction is important for the talk narrative and for design decisions during build.
+
+### What Gastown Is
+
+Gas Town (https://github.com/gastownhall/gastown) is a multi-agent orchestration system for coordinating AI coding agents. It uses a custom protocol built on git-backed hooks:
+- **Mayor** — primary AI coordinator (user-facing entry point)
+- **Polecats** — individual worker agents with persistent identity but ephemeral sessions
+- **Convoys / Beads** — custom work-tracking units stored as git-backed issues
+- **Molecules** — TOML workflow templates with checkpoint recovery
+- **Witness / Deacon / Dogs** — three-tier watchdog system for health monitoring
+- **Refinery** — per-rig merge queue processor with Bors-style bisecting logic
+
+The **Gastown Operator** (https://github.com/boshu2/gastown-operator) extends this to Kubernetes — it treats Polecats (individual agents) as pods and uses K8s as a horizontal scaling platform. Only Polecat CRs spawn actual pods; everything else is CRDs with no pod footprint. It has enterprise features: OpenShift support, FIPS-compliant images, supply chain security (SBOM, Trivy, provenance).
+
+Their core value prop: *"Queue 50 issues. Dispatch 50 polecats. Close your laptop. Come back to PRs."*
+
+### Our Differentiation
+
+**1. Protocol fidelity, not reimplementation.**
+Gastown invents its own coordination protocol (Convoys, Beads, Molecules — all custom). This operator wraps Anthropic's *native* Claude Code Agent Teams protocol exactly as designed (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, file-based JSON mailboxes at `~/.claude/teams/`, shared task list). When Anthropic ships protocol improvements, we inherit them automatically. Gastown has to manually track and reimplement every change.
+
+**2. Team-as-a-resource vs. agent-as-a-resource.**
+Gastown's fundamental CRD is a single agent (Polecat). Our fundamental CRD is a team (`AgentTeam`) — a higher-level abstraction that declares roles, budget, quality gates, and coordination topology in one resource. `AgentTeamTemplate` lets you define reusable team patterns (e.g., "3-agent security review"). This is more declarative and composable.
+
+**3. K8s as coordination fabric, not just scaling infrastructure.**
+Gastown uses K8s to scale agents horizontally — K8s is the execution platform. We use K8s primitives to *do* coordination work: ServiceAccounts scope what each agent pod can touch, PVCs are the communication medium (shared mailboxes), RBAC enforces capability boundaries per role. This is the cloud-native philosophical difference KubeCon audiences care about.
+
+**4. Use case fit.**
+Gastown's sweet spot: many independent tasks, many agents, async batch execution. Our sweet spot: one complex task, a small team of agents collaborating deeply with tight coordination. These are complementary, not competing — but collaborative multi-step work (lead + implementer + reviewer on a single feature) is a use case Gastown doesn't elegantly model.
+
+**5. The dogfooding story.**
+Built with the same tool it runs. Gastown doesn't have this.
+
+### One-Line Differentiation for the Proposal
+
+> *"Gastown builds a new protocol on top of K8s. We bring Anthropic's native protocol into K8s."*
+
+### Honest Gaps vs. Gastown (acknowledge in the talk)
+
+- Gastown is more mature with production-hardened operational features (watchdogs, merge queue, stall detection)
+- Gastown's git-backed persistence is more durable than PVC-based communication — if a cluster dies, git survives
+- Gastown operator already has enterprise features (OpenShift, FIPS, supply chain security) we're still building toward
+- Gastown has a battle-tested CLI (`kubectl-gt`) designed for both human operators and agents
+
+Acknowledging this honestly makes the talk more credible. Frame it as: "here's the existing landscape and here's the specific gap we fill."
+
+---
+
 ## Interesting Problems Encountered
 
 *Claude Code: when you hit something non-obvious, surprising, or that required a design decision, log it here with a brief note. These are the raw materials for the talk narrative.*

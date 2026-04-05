@@ -1,4 +1,4 @@
-module github.com/camlabs/claude-teams-operator
+module github.com/amcheste/claude-teams-operator
 
 go 1.23.0
 

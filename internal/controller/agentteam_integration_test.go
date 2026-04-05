@@ -15,7 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	claudev1alpha1 "github.com/camlabs/claude-teams-operator/api/v1alpha1"
+	claudev1alpha1 "github.com/amcheste/claude-teams-operator/api/v1alpha1"
 )
 
 // --- Test helpers ---
@@ -284,7 +284,7 @@ var _ = Describe("AgentTeam controller", func() {
 
 			var pod corev1.Pod
 			Expect(k8sClient.Get(ctx, nn(team.Name+"-lead", namespace), &pod)).To(Succeed())
-			Expect(pod.Labels["claude.camlabs.dev/role"]).To(Equal("lead"))
+			Expect(pod.Labels["claude.amcheste.io/role"]).To(Equal("lead"))
 		})
 
 		It("sets the teammate pod's role label and WORKTREE_PATH env var", func() {
@@ -293,7 +293,7 @@ var _ = Describe("AgentTeam controller", func() {
 
 			var pod corev1.Pod
 			Expect(k8sClient.Get(ctx, nn(team.Name+"-worker", namespace), &pod)).To(Succeed())
-			Expect(pod.Labels["claude.camlabs.dev/role"]).To(Equal("teammate"))
+			Expect(pod.Labels["claude.amcheste.io/role"]).To(Equal("teammate"))
 
 			env := envMap(pod)
 			Expect(env["WORKTREE_PATH"]).To(Equal("worktrees/worker"))
@@ -459,7 +459,7 @@ var _ = Describe("AgentTeam controller", func() {
 			if t.Annotations == nil {
 				t.Annotations = map[string]string{}
 			}
-			t.Annotations["approved.claude.camlabs.dev/spawn-gated"] = "true"
+			t.Annotations["approved.claude.amcheste.io/spawn-gated"] = "true"
 			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
 
 			// Teammate should now be spawned.

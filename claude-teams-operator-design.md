@@ -82,7 +82,7 @@ For teams that want to run 10+ agent teammates in parallel across a codebase, or
 ### 1. AgentTeam (primary CRD)
 
 ```yaml
-apiVersion: claude.camlabs.dev/v1alpha1
+apiVersion: claude.amcheste.io/v1alpha1
 kind: AgentTeam
 metadata:
   name: auth-refactor
@@ -255,7 +255,7 @@ status:
 ### 2. AgentTeamTemplate (reusable team patterns)
 
 ```yaml
-apiVersion: claude.camlabs.dev/v1alpha1
+apiVersion: claude.amcheste.io/v1alpha1
 kind: AgentTeamTemplate
 metadata:
   name: fullstack-review
@@ -283,7 +283,7 @@ spec:
 ### 3. AgentTeamRun (instance of a template)
 
 ```yaml
-apiVersion: claude.camlabs.dev/v1alpha1
+apiVersion: claude.amcheste.io/v1alpha1
 kind: AgentTeamRun
 metadata:
   name: review-pr-482

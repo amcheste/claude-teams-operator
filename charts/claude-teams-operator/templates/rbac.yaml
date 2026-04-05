@@ -14,13 +14,13 @@ metadata:
   name: {{ .Release.Name }}-manager-role
 rules:
   # AgentTeam CRDs
-  - apiGroups: ["claude.camlabs.dev"]
+  - apiGroups: ["claude.amcheste.io"]
     resources: ["agentteams", "agentteamtemplates", "agentteamruns"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: ["claude.camlabs.dev"]
+  - apiGroups: ["claude.amcheste.io"]
     resources: ["agentteams/status", "agentteamruns/status"]
     verbs: ["get", "update", "patch"]
-  - apiGroups: ["claude.camlabs.dev"]
+  - apiGroups: ["claude.amcheste.io"]
     resources: ["agentteams/finalizers", "agentteamruns/finalizers"]
     verbs: ["update"]
   # Pods (agent containers)

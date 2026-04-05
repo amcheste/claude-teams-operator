@@ -18,7 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	claudev1alpha1 "github.com/camlabs/claude-teams-operator/api/v1alpha1"
+	claudev1alpha1 "github.com/amcheste/claude-teams-operator/api/v1alpha1"
 )
 
 // --- Test Helpers ---
@@ -97,7 +97,7 @@ func succeededPod(name, namespace, teamName string) *corev1.Pod {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
-			Labels:    map[string]string{"claude.camlabs.dev/team": teamName},
+			Labels:    map[string]string{"claude.amcheste.io/team": teamName},
 		},
 		Status: corev1.PodStatus{Phase: corev1.PodSucceeded},
 	}
@@ -242,11 +242,11 @@ func TestReconcileInitializing_DeploysPods(t *testing.T) {
 	// Lead pod created.
 	var pod corev1.Pod
 	require.NoError(t, r.Get(ctx, types.NamespacedName{Name: "deploy-team-lead", Namespace: "default"}, &pod))
-	assert.Equal(t, "lead", pod.Labels["claude.camlabs.dev/role"])
+	assert.Equal(t, "lead", pod.Labels["claude.amcheste.io/role"])
 
 	// Teammate pod created (no dependencies).
 	require.NoError(t, r.Get(ctx, types.NamespacedName{Name: "deploy-team-worker", Namespace: "default"}, &pod))
-	assert.Equal(t, "teammate", pod.Labels["claude.camlabs.dev/role"])
+	assert.Equal(t, "teammate", pod.Labels["claude.amcheste.io/role"])
 }
 
 func TestReconcileInitializing_DependsOnBlocks(t *testing.T) {
@@ -302,7 +302,7 @@ func TestReconcileInitializing_ApprovalGateBlocksTeammate(t *testing.T) {
 func TestReconcileInitializing_ApprovalGrantedViaAnnotation(t *testing.T) {
 	team := withRepo(minimalTeam("approved-team"))
 	team.Annotations = map[string]string{
-		"approved.claude.camlabs.dev/spawn-worker": "true",
+		"approved.claude.amcheste.io/spawn-worker": "true",
 	}
 	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{
 		ApprovalGates: []claudev1alpha1.ApprovalGateSpec{
@@ -447,7 +447,7 @@ func TestBuildAgentPod_LeadHasNoWorktreePath(t *testing.T) {
 	env := envMap(pod)
 	_, hasWorktree := env["WORKTREE_PATH"]
 	assert.False(t, hasWorktree, "lead should not get a worktree path")
-	assert.Equal(t, "lead", pod.Labels["claude.camlabs.dev/role"])
+	assert.Equal(t, "lead", pod.Labels["claude.amcheste.io/role"])
 }
 
 func TestBuildAgentPod_WithSkills(t *testing.T) {
@@ -647,7 +647,7 @@ func TestCheckApprovalGate_GatePresentNotApproved(t *testing.T) {
 
 func TestCheckApprovalGate_ApprovedViaAnnotation(t *testing.T) {
 	team := minimalTeam("ag")
-	team.Annotations = map[string]string{"approved.claude.camlabs.dev/spawn-worker": "true"}
+	team.Annotations = map[string]string{"approved.claude.amcheste.io/spawn-worker": "true"}
 	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{
 		ApprovalGates: []claudev1alpha1.ApprovalGateSpec{{Event: "spawn-worker", Channel: "none"}},
 	}

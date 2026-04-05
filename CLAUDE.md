@@ -98,7 +98,7 @@ Start with Phase 1 (PVC creation + init Job), then work through sequentially.
 
 ## API Group
 
-`claude.camlabs.dev/v1alpha1`
+`claude.amcheste.io/v1alpha1`
 
 ## Testing
 

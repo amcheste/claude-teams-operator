@@ -78,7 +78,7 @@ kubectl describe agentteam auth-refactor -n dev-agents
 ## Example: Coding Team
 
 ```yaml
-apiVersion: claude.camlabs.dev/v1alpha1
+apiVersion: claude.amcheste.io/v1alpha1
 kind: AgentTeam
 metadata:
   name: auth-refactor
@@ -123,7 +123,7 @@ spec:
 ## Example: Cowork Team
 
 ```yaml
-apiVersion: claude.camlabs.dev/v1alpha1
+apiVersion: claude.amcheste.io/v1alpha1
 kind: AgentTeam
 metadata:
   name: q3-report
@@ -173,7 +173,7 @@ Grant approval after reviewing the researcher's output:
 
 ```bash
 kubectl annotate agentteam q3-report \
-  "approved.claude.camlabs.dev/spawn-email-drafter=true" \
+  "approved.claude.amcheste.io/spawn-email-drafter=true" \
   -n cowork-agents
 ```
 
@@ -204,7 +204,7 @@ A reusable team pattern. Does not run on its own — instantiate with `AgentTeam
 Instantiates an `AgentTeamTemplate` against a specific repo or workspace.
 
 ```yaml
-apiVersion: claude.camlabs.dev/v1alpha1
+apiVersion: claude.amcheste.io/v1alpha1
 kind: AgentTeamRun
 metadata:
   name: q4-security-review
@@ -260,7 +260,7 @@ kubectl get agentteam my-team -o jsonpath='{.status.teammates[*].pendingApproval
 
 # Grant approval
 kubectl annotate agentteam my-team \
-  "approved.claude.camlabs.dev/spawn-email-drafter=true"
+  "approved.claude.amcheste.io/spawn-email-drafter=true"
 ```
 
 If `channel: webhook` is set, the operator POSTs a JSON payload to `webhookUrl` when the gate is triggered, allowing an external system to present the approval to a human and then apply the annotation.

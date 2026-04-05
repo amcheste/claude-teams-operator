@@ -1,4 +1,4 @@
-apiVersion: claude.camlabs.dev/v1alpha1
+apiVersion: claude.amcheste.io/v1alpha1
 kind: AgentTeam
 metadata:
   name: auth-refactor
