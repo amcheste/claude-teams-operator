@@ -629,9 +629,7 @@ func TestDependenciesMet_DepStillRunning(t *testing.T) {
 func TestCheckApprovalGate_NoGateDefined(t *testing.T) {
 	team := minimalTeam("ag")
 	r := newReconciler(team)
-	approved, err := r.checkApprovalGate(context.Background(), team, "spawn-worker")
-	require.NoError(t, err)
-	assert.True(t, approved)
+	assert.True(t, r.checkApprovalGate(context.Background(), team, "spawn-worker"))
 }
 
 func TestCheckApprovalGate_GatePresentNotApproved(t *testing.T) {
@@ -640,9 +638,7 @@ func TestCheckApprovalGate_GatePresentNotApproved(t *testing.T) {
 		ApprovalGates: []claudev1alpha1.ApprovalGateSpec{{Event: "spawn-worker", Channel: "none"}},
 	}
 	r := newReconciler(team)
-	approved, err := r.checkApprovalGate(context.Background(), team, "spawn-worker")
-	require.NoError(t, err)
-	assert.False(t, approved)
+	assert.False(t, r.checkApprovalGate(context.Background(), team, "spawn-worker"))
 }
 
 func TestCheckApprovalGate_ApprovedViaAnnotation(t *testing.T) {
@@ -652,9 +648,7 @@ func TestCheckApprovalGate_ApprovedViaAnnotation(t *testing.T) {
 		ApprovalGates: []claudev1alpha1.ApprovalGateSpec{{Event: "spawn-worker", Channel: "none"}},
 	}
 	r := newReconciler(team)
-	approved, err := r.checkApprovalGate(context.Background(), team, "spawn-worker")
-	require.NoError(t, err)
-	assert.True(t, approved)
+	assert.True(t, r.checkApprovalGate(context.Background(), team, "spawn-worker"))
 }
 
 // --- reconcileTerminal ---
@@ -908,7 +902,7 @@ func TestSyncPodStatuses_ReflectsPodPhases(t *testing.T) {
 	team = fetch(t, r, "sync-test")
 	ctx := context.Background()
 
-	require.NoError(t, r.syncPodStatuses(ctx, team))
+	r.syncPodStatuses(ctx, team)
 
 	require.NotNil(t, team.Status.Lead)
 	assert.Equal(t, "sync-test-lead", team.Status.Lead.PodName)
