@@ -160,7 +160,7 @@ func (r *AgentTeamReconciler) reconcilePending(ctx context.Context, team *claude
 	team.Status.Phase = "Initializing"
 	now := metav1.Now()
 	team.Status.StartedAt = &now
-	setCondition(team, "Progressing", metav1.ConditionTrue, "Initializing", "PVCs provisioned, init job started")
+	setCondition(team,metav1.ConditionTrue, "Initializing", "PVCs provisioned, init job started")
 	return ctrl.Result{RequeueAfter: 5 * time.Second}, r.Status().Update(ctx, team)
 }
 
@@ -176,7 +176,7 @@ func (r *AgentTeamReconciler) reconcileInitializing(ctx context.Context, team *c
 	if r.isTimedOut(team) {
 		log.Info("Team timed out during initialization")
 		team.Status.Phase = "TimedOut"
-		setCondition(team, "Progressing", metav1.ConditionFalse, "TimedOut", "Team exceeded configured timeout during initialization")
+		setCondition(team,metav1.ConditionFalse, "TimedOut", "Team exceeded configured timeout during initialization")
 		return ctrl.Result{}, r.Status().Update(ctx, team)
 	}
 
@@ -188,7 +188,7 @@ func (r *AgentTeamReconciler) reconcileInitializing(ctx context.Context, team *c
 		}
 		if failed {
 			team.Status.Phase = "Failed"
-			setCondition(team, "Progressing", metav1.ConditionFalse, "InitJobFailed", "Init job exceeded backoff limit")
+			setCondition(team,metav1.ConditionFalse, "InitJobFailed", "Init job exceeded backoff limit")
 			return ctrl.Result{}, r.Status().Update(ctx, team)
 		}
 		if !done {
@@ -209,11 +209,7 @@ func (r *AgentTeamReconciler) reconcileInitializing(ctx context.Context, team *c
 		if !r.dependenciesMet(ctx, team, tm.DependsOn) {
 			continue
 		}
-		approved, err := r.checkApprovalGate(ctx, team, "spawn-"+tm.Name)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if !approved {
+		if !r.checkApprovalGate(ctx, team, "spawn-"+tm.Name) {
 			r.setTeammatePendingApproval(team, tm.Name, "spawn-"+tm.Name)
 			continue
 		}
@@ -225,7 +221,7 @@ func (r *AgentTeamReconciler) reconcileInitializing(ctx context.Context, team *c
 	}
 
 	team.Status.Phase = "Running"
-	setCondition(team, "Progressing", metav1.ConditionTrue, "Running", "Agent pods deployed")
+	setCondition(team,metav1.ConditionTrue, "Running", "Agent pods deployed")
 	return ctrl.Result{RequeueAfter: 30 * time.Second}, r.Status().Update(ctx, team)
 }
 
@@ -243,7 +239,7 @@ func (r *AgentTeamReconciler) reconcileRunning(ctx context.Context, team *claude
 			return ctrl.Result{}, err
 		}
 		team.Status.Phase = "TimedOut"
-		setCondition(team, "Progressing", metav1.ConditionFalse, "TimedOut", "Team exceeded configured timeout")
+		setCondition(team,metav1.ConditionFalse, "TimedOut", "Team exceeded configured timeout")
 		return ctrl.Result{}, r.Status().Update(ctx, team)
 	}
 
@@ -255,14 +251,12 @@ func (r *AgentTeamReconciler) reconcileRunning(ctx context.Context, team *claude
 			return ctrl.Result{}, err
 		}
 		team.Status.Phase = "BudgetExceeded"
-		setCondition(team, "Progressing", metav1.ConditionFalse, "BudgetExceeded", "Estimated cost exceeded budget limit")
+		setCondition(team,metav1.ConditionFalse, "BudgetExceeded", "Estimated cost exceeded budget limit")
 		return ctrl.Result{}, r.Status().Update(ctx, team)
 	}
 
 	// Sync pod statuses into team.Status.
-	if err := r.syncPodStatuses(ctx, team); err != nil {
-		return ctrl.Result{}, err
-	}
+	r.syncPodStatuses(ctx, team)
 
 	// Spawn any newly unblocked or newly approved teammates.
 	for _, tm := range team.Spec.Teammates {
@@ -277,11 +271,7 @@ func (r *AgentTeamReconciler) reconcileRunning(ctx context.Context, team *claude
 		if !r.dependenciesMet(ctx, team, tm.DependsOn) {
 			continue
 		}
-		approved, err := r.checkApprovalGate(ctx, team, "spawn-"+tm.Name)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if !approved {
+		if !r.checkApprovalGate(ctx, team, "spawn-"+tm.Name) {
 			r.setTeammatePendingApproval(team, tm.Name, "spawn-"+tm.Name)
 			continue
 		}
@@ -301,7 +291,7 @@ func (r *AgentTeamReconciler) reconcileRunning(ctx context.Context, team *claude
 	}
 	if anyFailed {
 		team.Status.Phase = "Failed"
-		setCondition(team, "Progressing", metav1.ConditionFalse, "AgentFailed", "One or more agent pods failed")
+		setCondition(team,metav1.ConditionFalse, "AgentFailed", "One or more agent pods failed")
 		return ctrl.Result{}, r.Status().Update(ctx, team)
 	}
 	if allDone {
@@ -311,7 +301,7 @@ func (r *AgentTeamReconciler) reconcileRunning(ctx context.Context, team *claude
 			// Don't fail the team for post-completion actions.
 		}
 		team.Status.Phase = "Completed"
-		setCondition(team, "Progressing", metav1.ConditionFalse, "Completed", "All agents finished successfully")
+		setCondition(team,metav1.ConditionFalse, "Completed", "All agents finished successfully")
 		return ctrl.Result{}, r.Status().Update(ctx, team)
 	}
 
@@ -371,7 +361,9 @@ func (r *AgentTeamReconciler) ensurePVC(ctx context.Context, team *claudev1alpha
 			},
 		},
 	}
-	ctrl.SetControllerReference(team, pvc, r.Scheme)
+	if err := ctrl.SetControllerReference(team, pvc, r.Scheme); err != nil {
+		return err
+	}
 	return r.Create(ctx, pvc)
 }
 
@@ -473,7 +465,9 @@ echo "[init] Done"
 			},
 		},
 	}
-	ctrl.SetControllerReference(team, job, r.Scheme)
+	if err := ctrl.SetControllerReference(team, job, r.Scheme); err != nil {
+		return err
+	}
 	return r.Create(ctx, job)
 }
 
@@ -563,7 +557,9 @@ func (r *AgentTeamReconciler) ensureMCPConfigMap(ctx context.Context, team *clau
 			"mcp.json": string(data),
 		},
 	}
-	ctrl.SetControllerReference(team, cm, r.Scheme)
+	if err := ctrl.SetControllerReference(team, cm, r.Scheme); err != nil {
+		return err
+	}
 	return r.Create(ctx, cm)
 }
 
@@ -769,7 +765,7 @@ func (r *AgentTeamReconciler) buildAgentPod(
 // --- Status Sync ---
 
 // syncPodStatuses reads pod phases and updates team.Status.Lead and team.Status.Teammates.
-func (r *AgentTeamReconciler) syncPodStatuses(ctx context.Context, team *claudev1alpha1.AgentTeam) error {
+func (r *AgentTeamReconciler) syncPodStatuses(ctx context.Context, team *claudev1alpha1.AgentTeam) {
 	// Lead pod.
 	leadPod := &corev1.Pod{}
 	if err := r.Get(ctx, types.NamespacedName{Name: agentPodName(team, "lead"), Namespace: team.Namespace}, leadPod); err == nil {
@@ -799,7 +795,6 @@ func (r *AgentTeamReconciler) syncPodStatuses(ctx context.Context, team *claudev
 		st.PodName = pod.Name
 		st.Phase = podPhaseToAgentPhase(pod)
 	}
-	return nil
 }
 
 func podPhaseToAgentPhase(pod *corev1.Pod) string {
@@ -876,7 +871,7 @@ func (r *AgentTeamReconciler) executeOnComplete(ctx context.Context, team *claud
 	switch team.Spec.Lifecycle.OnComplete {
 	case "notify":
 		if team.Spec.Observability != nil && team.Spec.Observability.Webhook != nil {
-			return r.sendWebhookEvent(team.Spec.Observability.Webhook.URL, "completed", team)
+			return r.sendWebhookEvent(ctx, team.Spec.Observability.Webhook.URL, "completed", team)
 		}
 	case "create-pr":
 		log.Info("TODO: create PR via gh CLI or GitHub API")
@@ -888,9 +883,9 @@ func (r *AgentTeamReconciler) executeOnComplete(ctx context.Context, team *claud
 
 // --- Approval Gates ---
 
-func (r *AgentTeamReconciler) checkApprovalGate(ctx context.Context, team *claudev1alpha1.AgentTeam, event string) (approved bool, err error) {
+func (r *AgentTeamReconciler) checkApprovalGate(ctx context.Context, team *claudev1alpha1.AgentTeam, event string) bool {
 	if team.Spec.Lifecycle == nil || len(team.Spec.Lifecycle.ApprovalGates) == 0 {
-		return true, nil
+		return true
 	}
 	var gate *claudev1alpha1.ApprovalGateSpec
 	for i := range team.Spec.Lifecycle.ApprovalGates {
@@ -900,25 +895,25 @@ func (r *AgentTeamReconciler) checkApprovalGate(ctx context.Context, team *claud
 		}
 	}
 	if gate == nil {
-		return true, nil // No gate for this event.
+		return true // No gate for this event.
 	}
 
 	// Check for the approval annotation.
 	annotationKey := "approved.claude.amcheste.io/" + event
 	if team.Annotations[annotationKey] == "true" {
-		return true, nil
+		return true
 	}
 
 	// Send webhook notification so an external system can approve.
 	if gate.Channel == "webhook" && gate.WebhookURL != "" {
-		if err := r.sendWebhookEvent(gate.WebhookURL, event, team); err != nil {
+		if err := r.sendWebhookEvent(ctx, gate.WebhookURL, event, team); err != nil {
 			log.FromContext(ctx).Error(err, "Failed to send approval webhook", "event", event)
 		}
 	}
-	return false, nil
+	return false
 }
 
-func (r *AgentTeamReconciler) sendWebhookEvent(url, event string, team *claudev1alpha1.AgentTeam) error {
+func (r *AgentTeamReconciler) sendWebhookEvent(ctx context.Context, url, event string, team *claudev1alpha1.AgentTeam) error {
 	payload := map[string]string{
 		"event":     event,
 		"team":      team.Name,
@@ -929,7 +924,12 @@ func (r *AgentTeamReconciler) sendWebhookEvent(url, event string, team *claudev1
 	if err != nil {
 		return err
 	}
-	resp, err := http.Post(url, "application/json", bytes.NewReader(body)) //nolint:gosec // URL from trusted CR
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body)) //nolint:gosec // URL from trusted CR
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -1053,7 +1053,8 @@ func (r *AgentTeamReconciler) terminateAllPods(ctx context.Context, team *claude
 
 // --- Condition Helpers ---
 
-func setCondition(team *claudev1alpha1.AgentTeam, condType string, status metav1.ConditionStatus, reason, message string) {
+func setCondition(team *claudev1alpha1.AgentTeam, status metav1.ConditionStatus, reason, message string) {
+	const condType = "Progressing"
 	now := metav1.Now()
 	for i, c := range team.Status.Conditions {
 		if c.Type == condType {
