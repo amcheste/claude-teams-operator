@@ -15,12 +15,13 @@
 //   - SetActiveTeams(count int)
 //
 // Metrics:
-//   claude_team_active_total              (Gauge)
-//   claude_team_duration_seconds          (Histogram)   labels: team, namespace
-//   claude_teammate_tokens_total          (Counter)     labels: team, teammate, model
-//   claude_team_cost_usd                  (Gauge)       labels: team, namespace
-//   claude_team_tasks_completed_total     (Counter)     labels: team, teammate
-//   claude_teammate_restarts_total        (Counter)     labels: team, teammate
-//   claude_team_budget_remaining_usd      (Gauge)       labels: team, namespace
-//   claude_teammate_idle_seconds          (Histogram)   labels: team, teammate
+//
+//	claude_team_active_total              (Gauge)
+//	claude_team_duration_seconds          (Histogram)   labels: team, namespace
+//	claude_teammate_tokens_total          (Counter)     labels: team, teammate, model
+//	claude_team_cost_usd                  (Gauge)       labels: team, namespace
+//	claude_team_tasks_completed_total     (Counter)     labels: team, teammate
+//	claude_teammate_restarts_total        (Counter)     labels: team, teammate
+//	claude_team_budget_remaining_usd      (Gauge)       labels: team, namespace
+//	claude_teammate_idle_seconds          (Histogram)   labels: team, teammate
 package metrics

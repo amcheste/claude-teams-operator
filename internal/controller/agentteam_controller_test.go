@@ -657,6 +657,268 @@ func TestCheckApprovalGate_ApprovedViaAnnotation(t *testing.T) {
 	assert.True(t, approved)
 }
 
+// --- reconcileTerminal ---
+
+func TestReconcileTerminal_StampsCompletedAt(t *testing.T) {
+	team := minimalTeam("term-stamp")
+	team.Status.Phase = "Completed"
+	r := newReconciler(team)
+	team = fetch(t, r, "term-stamp")
+	ctx := context.Background()
+
+	_, err := r.reconcileTerminal(ctx, team)
+	require.NoError(t, err)
+	assert.NotNil(t, team.Status.CompletedAt, "reconcileTerminal should stamp CompletedAt")
+}
+
+func TestReconcileTerminal_Idempotent(t *testing.T) {
+	team := minimalTeam("term-idem")
+	team.Status.Phase = "Completed"
+	r := newReconciler(team)
+	team = fetch(t, r, "term-idem")
+	ctx := context.Background()
+
+	_, err := r.reconcileTerminal(ctx, team)
+	require.NoError(t, err)
+	require.NotNil(t, team.Status.CompletedAt)
+	firstStamp := team.Status.CompletedAt.Time
+
+	// Second call must not error and must not re-stamp CompletedAt.
+	team = fetch(t, r, "term-idem")
+	require.NotNil(t, team.Status.CompletedAt, "CompletedAt must be persisted after first call")
+
+	_, err = r.reconcileTerminal(ctx, team)
+	require.NoError(t, err, "second reconcileTerminal call must not error")
+	assert.Equal(t, firstStamp.Unix(), team.Status.CompletedAt.Time.Unix(),
+		"second call must not overwrite CompletedAt")
+}
+
+func TestReconcileTerminal_DeletesRunningPods(t *testing.T) {
+	team := minimalTeam("term-delete")
+	team.Status.Phase = "Failed"
+	leadPod := runningPod("term-delete-lead", "default", "term-delete")
+	workerPod := runningPod("term-delete-worker", "default", "term-delete")
+	r := newReconciler(team, leadPod, workerPod)
+	team = fetch(t, r, "term-delete")
+	ctx := context.Background()
+
+	_, err := r.reconcileTerminal(ctx, team)
+	require.NoError(t, err)
+
+	var pod corev1.Pod
+	assert.True(t, errors.IsNotFound(r.Get(ctx, types.NamespacedName{Name: "term-delete-lead", Namespace: "default"}, &pod)),
+		"lead pod should be deleted in terminal phase")
+	assert.True(t, errors.IsNotFound(r.Get(ctx, types.NamespacedName{Name: "term-delete-worker", Namespace: "default"}, &pod)),
+		"worker pod should be deleted in terminal phase")
+}
+
+// --- reconcileRunning: cleanup on timeout/budget ---
+
+func TestReconcileRunning_Timeout_TerminatesPods(t *testing.T) {
+	team := withLifecycle(minimalTeam("timeout-cleanup"), "1m", "100.00")
+	leadPod := runningPod("timeout-cleanup-lead", "default", "timeout-cleanup")
+	workerPod := runningPod("timeout-cleanup-worker", "default", "timeout-cleanup")
+	startTime := metav1.NewTime(time.Now().Add(-2 * time.Minute))
+
+	r := newReconciler(team, leadPod, workerPod)
+	team = fetch(t, r, "timeout-cleanup")
+	team.Status.Phase = "Running"
+	team.Status.StartedAt = &startTime
+	ctx := context.Background()
+
+	_, err := r.reconcileRunning(ctx, team)
+	require.NoError(t, err)
+	assert.Equal(t, "TimedOut", team.Status.Phase)
+
+	var pod corev1.Pod
+	assert.True(t, errors.IsNotFound(r.Get(ctx, types.NamespacedName{Name: "timeout-cleanup-lead", Namespace: "default"}, &pod)),
+		"lead pod must be deleted when team times out")
+	assert.True(t, errors.IsNotFound(r.Get(ctx, types.NamespacedName{Name: "timeout-cleanup-worker", Namespace: "default"}, &pod)),
+		"worker pod must be deleted when team times out")
+}
+
+func TestReconcileRunning_BudgetExceeded_TerminatesPods(t *testing.T) {
+	budget := "0.01" // tiny budget, exceeded after 60 minutes of running
+	team := minimalTeam("budget-cleanup")
+	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{BudgetLimit: &budget}
+	leadPod := runningPod("budget-cleanup-lead", "default", "budget-cleanup")
+	workerPod := runningPod("budget-cleanup-worker", "default", "budget-cleanup")
+	startTime := metav1.NewTime(time.Now().Add(-60 * time.Minute))
+
+	r := newReconciler(team, leadPod, workerPod)
+	team = fetch(t, r, "budget-cleanup")
+	team.Status.Phase = "Running"
+	team.Status.StartedAt = &startTime
+	ctx := context.Background()
+
+	_, err := r.reconcileRunning(ctx, team)
+	require.NoError(t, err)
+	assert.Equal(t, "BudgetExceeded", team.Status.Phase)
+
+	var pod corev1.Pod
+	assert.True(t, errors.IsNotFound(r.Get(ctx, types.NamespacedName{Name: "budget-cleanup-lead", Namespace: "default"}, &pod)),
+		"lead pod must be deleted when budget is exceeded")
+	assert.True(t, errors.IsNotFound(r.Get(ctx, types.NamespacedName{Name: "budget-cleanup-worker", Namespace: "default"}, &pod)),
+		"worker pod must be deleted when budget is exceeded")
+}
+
+// --- reconcileRunning: teammate failure ---
+
+func TestReconcileRunning_TeammateFailure_SetsFailedPhase(t *testing.T) {
+	// Lead is still running; a teammate pod fails. Team must move to Failed.
+	team := minimalTeam("teammate-fail")
+	leadPod := runningPod("teammate-fail-lead", "default", "teammate-fail")
+	workerPod := failedPod("teammate-fail-worker", "default", "teammate-fail")
+	startTime := metav1.NewTime(time.Now().Add(-1 * time.Minute))
+
+	r := newReconciler(team, leadPod, workerPod)
+	team = fetch(t, r, "teammate-fail")
+	team.Status.Phase = "Running"
+	team.Status.StartedAt = &startTime
+	ctx := context.Background()
+
+	_, err := r.reconcileRunning(ctx, team)
+	require.NoError(t, err)
+	assert.Equal(t, "Failed", team.Status.Phase)
+}
+
+// --- reconcileRunning: pods not yet spawned ---
+
+func TestReconcileRunning_LeadNotSpawned_KeepsRunning(t *testing.T) {
+	// Team entered Running but lead pod has not been created yet (e.g. race on first reconcile).
+	// Operator should requeue and wait rather than prematurely completing.
+	team := minimalTeam("no-lead")
+	startTime := metav1.NewTime(time.Now().Add(-1 * time.Minute))
+	r := newReconciler(team) // no pods in cluster
+	team = fetch(t, r, "no-lead")
+	team.Status.Phase = "Running"
+	team.Status.StartedAt = &startTime
+	ctx := context.Background()
+
+	result, err := r.reconcileRunning(ctx, team)
+	require.NoError(t, err)
+	assert.Equal(t, "Running", team.Status.Phase, "phase must not advance before lead pod is spawned")
+	assert.Equal(t, 30*time.Second, result.RequeueAfter)
+}
+
+// --- reconcileInitializing: edge cases ---
+
+func TestReconcileInitializing_InitJobMissing_Waits(t *testing.T) {
+	// Coding team where the init Job was never created (e.g. operator restarted mid-reconcile).
+	// Operator should requeue rather than proceeding to deploy pods.
+	team := withRepo(minimalTeam("no-job-team"))
+	r := newReconciler(team) // no Job object in cluster
+	team = fetch(t, r, "no-job-team")
+	ctx := context.Background()
+
+	result, err := r.reconcileInitializing(ctx, team)
+	require.NoError(t, err)
+	assert.Equal(t, 10*time.Second, result.RequeueAfter)
+	assert.Empty(t, team.Status.Phase, "phase must not advance while init job is absent/incomplete")
+}
+
+func TestReconcileInitializing_HangingInitJob_TimesOut(t *testing.T) {
+	// Init Job is still Active but the team's configured timeout has elapsed.
+	// Without a timeout check in reconcileInitializing the team would be stuck forever.
+	team := withLifecycle(withRepo(minimalTeam("hang-team")), "1m", "100.00")
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{Name: "hang-team-init", Namespace: "default"},
+		Status:     batchv1.JobStatus{Active: 1},
+	}
+	r := newReconciler(team, job)
+	team = fetch(t, r, "hang-team")
+	// Simulate the team having started 2 minutes ago (past the 1-minute timeout).
+	team.Status.StartedAt = &metav1.Time{Time: time.Now().Add(-2 * time.Minute)}
+	ctx := context.Background()
+
+	_, err := r.reconcileInitializing(ctx, team)
+	require.NoError(t, err)
+	assert.Equal(t, "TimedOut", team.Status.Phase,
+		"team must time out even when stuck waiting for a hung init job")
+}
+
+// --- dependenciesMet: additional edge cases ---
+
+func TestDependenciesMet_DepFailed_NotMet(t *testing.T) {
+	// A failed pod must NOT satisfy a dependency — only Succeeded counts.
+	team := minimalTeam("dep-fail")
+	pod := failedPod("dep-fail-first", "default", "dep-fail")
+	r := newReconciler(team, pod)
+	assert.False(t, r.dependenciesMet(context.Background(), team, []string{"first"}),
+		"a failed dependency pod must not be considered met")
+}
+
+func TestDependenciesMet_AllMustSucceed(t *testing.T) {
+	// All listed dependencies must have Succeeded; one still Running blocks the gate.
+	team := minimalTeam("dep-all")
+	first := succeededPod("dep-all-first", "default", "dep-all")
+	second := runningPod("dep-all-second", "default", "dep-all")
+	r := newReconciler(team, first, second)
+	assert.False(t, r.dependenciesMet(context.Background(), team, []string{"first", "second"}),
+		"all dependencies must have Succeeded — one Running is not enough")
+}
+
+// --- buildAgentPod: auth and command override ---
+
+func TestBuildAgentPod_OAuthAuth(t *testing.T) {
+	team := minimalTeam("oauth-test")
+	team.Spec.Auth.APIKeySecret = ""
+	team.Spec.Auth.OAuthSecret = "my-oauth-secret"
+	r := newReconciler(team)
+
+	pod := r.buildAgentPod(team, "worker", "sonnet", "work", "auto-accept", false,
+		corev1.ResourceRequirements{}, nil, nil, nil)
+
+	// ANTHROPIC_API_KEY must NOT be injected when OAuth is configured.
+	env := envMap(pod)
+	_, hasAPIKey := env["ANTHROPIC_API_KEY"]
+	assert.False(t, hasAPIKey, "ANTHROPIC_API_KEY must not be set when OAuth is used")
+
+	// CLAUDE_OAUTH_TOKEN must be set via SecretKeyRef (ValueFrom, not plain Value).
+	var foundOAuth bool
+	for _, e := range pod.Spec.Containers[0].Env {
+		if e.Name == "CLAUDE_OAUTH_TOKEN" {
+			foundOAuth = true
+			require.NotNil(t, e.ValueFrom, "CLAUDE_OAUTH_TOKEN must use ValueFrom SecretKeyRef")
+			assert.Equal(t, "my-oauth-secret", e.ValueFrom.SecretKeyRef.Name)
+		}
+	}
+	assert.True(t, foundOAuth, "CLAUDE_OAUTH_TOKEN env var must be present")
+}
+
+func TestBuildAgentPod_AgentCommandOverride(t *testing.T) {
+	team := minimalTeam("cmd-test")
+	r := newReconciler(team)
+	r.AgentCommand = []string{"sh", "-c", "exit 0"}
+
+	pod := r.buildAgentPod(team, "worker", "sonnet", "work", "auto-accept", false,
+		corev1.ResourceRequirements{}, nil, nil, nil)
+
+	assert.Equal(t, []string{"sh", "-c", "exit 0"}, pod.Spec.Containers[0].Command,
+		"AgentCommand override must be applied to the container spec")
+}
+
+// --- syncPodStatuses ---
+
+func TestSyncPodStatuses_ReflectsPodPhases(t *testing.T) {
+	team := minimalTeam("sync-test")
+	leadPod := succeededPod("sync-test-lead", "default", "sync-test")
+	workerPod := runningPod("sync-test-worker", "default", "sync-test")
+	r := newReconciler(team, leadPod, workerPod)
+	team = fetch(t, r, "sync-test")
+	ctx := context.Background()
+
+	require.NoError(t, r.syncPodStatuses(ctx, team))
+
+	require.NotNil(t, team.Status.Lead)
+	assert.Equal(t, "sync-test-lead", team.Status.Lead.PodName)
+	assert.Equal(t, "Completed", team.Status.Lead.Phase)
+
+	require.Len(t, team.Status.Teammates, 1)
+	assert.Equal(t, "sync-test-worker", team.Status.Teammates[0].PodName)
+	assert.Equal(t, "Running", team.Status.Teammates[0].Phase)
+}
+
 // --- Pod/Volume introspection helpers ---
 
 func envMap(pod *corev1.Pod) map[string]string {

@@ -19,11 +19,12 @@
 //   - "team.timedout"    — Team exceeded timeout
 //
 // Payload format (JSON):
-//   {
-//     "event": "task.completed",
-//     "team": "auth-refactor",
-//     "namespace": "dev-agents",
-//     "timestamp": "2026-04-03T14:30:00Z",
-//     "data": { ... event-specific fields ... }
-//   }
+//
+//	{
+//	  "event": "task.completed",
+//	  "team": "auth-refactor",
+//	  "namespace": "dev-agents",
+//	  "timestamp": "2026-04-03T14:30:00Z",
+//	  "data": { ... event-specific fields ... }
+//	}
 package webhook

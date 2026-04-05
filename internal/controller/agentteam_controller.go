@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	defaultAgentImage = "ghcr.io/camlabs/claude-code-runner:latest"
+	defaultAgentImage = "ghcr.io/amcheste/claude-code-runner:latest"
 	defaultInitImage  = "alpine/git:latest"
 )
 
@@ -170,6 +170,15 @@ func (r *AgentTeamReconciler) reconcilePending(ctx context.Context, team *claude
 func (r *AgentTeamReconciler) reconcileInitializing(ctx context.Context, team *claudev1alpha1.AgentTeam) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 	log.Info("Phase: Initializing")
+
+	// Enforce timeout even during initialization — prevents a team being permanently
+	// stuck on a slow or hung init Job.
+	if r.isTimedOut(team) {
+		log.Info("Team timed out during initialization")
+		team.Status.Phase = "TimedOut"
+		setCondition(team, "Progressing", metav1.ConditionFalse, "TimedOut", "Team exceeded configured timeout during initialization")
+		return ctrl.Result{}, r.Status().Update(ctx, team)
+	}
 
 	// In coding mode, wait for the init Job before spawning pods.
 	if team.Spec.Repository != nil && team.Spec.Repository.URL != "" {
@@ -449,7 +458,7 @@ echo "[init] Done"
 								}
 								return []string{"sh", "-c", initScript}
 							}(),
-							Env:     envVars,
+							Env: envVars,
 							VolumeMounts: []corev1.VolumeMount{
 								{Name: "repo", MountPath: "/workspace"},
 								{Name: "team-state", MountPath: "/state"},
@@ -815,7 +824,7 @@ func (r *AgentTeamReconciler) allPodsComplete(ctx context.Context, team *claudev
 		pod := &corev1.Pod{}
 		if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: team.Namespace}, pod); err != nil {
 			if errors.IsNotFound(err) {
-				return false, false, nil // Not yet spawned.
+				return false, false, nil // Not yet spawned — keep waiting.
 			}
 			return false, false, err
 		}
@@ -829,26 +838,34 @@ func (r *AgentTeamReconciler) allPodsComplete(ctx context.Context, team *claudev
 		}
 	}
 
-	// Lead must succeed.
+	// Scan every pod (lead + all teammates) in a single pass so that a failed
+	// teammate is detected even while the lead is still running.
+	allSucceeded := true
+
 	done, failed, err := checkPod(agentPodName(team, "lead"))
-	if err != nil || failed {
-		return false, failed, err
+	if err != nil {
+		return false, false, err
+	}
+	if failed {
+		return false, true, nil
 	}
 	if !done {
-		return false, false, nil
+		allSucceeded = false
 	}
 
-	// All spawned teammates must succeed.
 	for _, tm := range team.Spec.Teammates {
 		done, failed, err := checkPod(agentPodName(team, tm.Name))
-		if err != nil || failed {
-			return false, failed, err
+		if err != nil {
+			return false, false, err
+		}
+		if failed {
+			return false, true, nil
 		}
 		if !done {
-			return false, false, nil
+			allSucceeded = false
 		}
 	}
-	return true, false, nil
+	return allSucceeded, false, nil
 }
 
 func (r *AgentTeamReconciler) executeOnComplete(ctx context.Context, team *claudev1alpha1.AgentTeam) error {
