@@ -25,12 +25,9 @@ jobs:
         with:
           config: >-
             p/secrets
-            # TODO: add language-specific rulesets for your project, e.g.:
-            #   p/python       — Python security and correctness
-            #   p/javascript   — JS/TS security and correctness
-            #   p/go           — Go security and correctness
-            #   p/bash         — Shell script safety
-            #   p/owasp-top-ten — OWASP Top 10
+            p/go
+            p/bash
+            p/owasp-top-ten
           generateSarif: "1"
 
       - uses: github/codeql-action/upload-sarif@d4b3ca9fa7f69d38bfcd667bdc45bc373d16277e # v4

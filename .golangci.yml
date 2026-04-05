@@ -1,0 +1,40 @@
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - errcheck       # check unchecked errors
+    - gosimple       # simplification suggestions
+    - govet          # correctness checks
+    - ineffassign    # detect ineffectual assignments
+    - staticcheck    # static analysis
+    - unused         # check for unused code
+    - gofmt          # formatting
+    - goimports      # import ordering
+    - misspell       # spelling mistakes in comments/strings
+    - gosec          # security checks
+    - noctx          # http requests without context
+    - bodyclose      # http response body closure
+    - prealloc       # slice pre-allocation suggestions
+    - unconvert      # unnecessary type conversions
+    - unparam        # unused function parameters
+
+linters-settings:
+  gosec:
+    excludes:
+      - G107  # url provided to HTTP request as taint input (we trust CR content)
+  goimports:
+    local-prefixes: github.com/amcheste/claude-teams-operator
+
+issues:
+  exclude-rules:
+    # Test files get more relaxed rules
+    - path: _test\.go
+      linters:
+        - gosec
+        - errcheck
+    # Generated deepcopy files
+    - path: zz_generated
+      linters:
+        - all
