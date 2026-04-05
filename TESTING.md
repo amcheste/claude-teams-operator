@@ -27,9 +27,9 @@ go test ./internal/controller/... -run TestReconcilePending_CodingMode
 go test ./internal/controller/... -coverprofile=cover.out && go tool cover -html=cover.out
 ```
 
-### What is covered (36 tests)
+### What is covered (50 tests)
 
-#### Reconciler phases
+#### Reconciler phases — happy path
 
 | Test | What it verifies |
 |------|-----------------|
@@ -45,8 +45,22 @@ go test ./internal/controller/... -coverprofile=cover.out && go tool cover -html
 | `TestReconcileRunning_Timeout_SetsTimedOut` | sets `TimedOut` when elapsed time exceeds `lifecycle.timeout` |
 | `TestReconcileRunning_BudgetExceeded_SetsBudgetExceeded` | sets `BudgetExceeded` when estimated cost exceeds `lifecycle.budgetLimit` |
 | `TestReconcileRunning_AllPodsSucceeded_SetsCompleted` | sets `Completed` when lead and all teammates are `Succeeded` |
-| `TestReconcileRunning_PodFailed_SetsFailedPhase` | sets `Failed` when any pod enters `Failed` phase |
+| `TestReconcileRunning_PodFailed_SetsFailedPhase` | sets `Failed` when lead pod enters `Failed` phase |
 | `TestReconcileRunning_SpawnsNewlyUnblockedTeammate` | spawns a teammate mid-run once its `dependsOn` dep completes |
+
+#### Reconciler phases — unhappy path
+
+| Test | What it verifies |
+|------|-----------------|
+| `TestReconcileInitializing_InitJobMissing_Waits` | requeues when init Job is absent (operator restart mid-reconcile) |
+| `TestReconcileInitializing_HangingInitJob_TimesOut` | sets `TimedOut` when init Job is still running past `lifecycle.timeout` |
+| `TestReconcileRunning_TeammateFailure_SetsFailedPhase` | sets `Failed` when a teammate pod fails while lead is still running |
+| `TestReconcileRunning_LeadNotSpawned_KeepsRunning` | requeues without completing when lead pod does not yet exist |
+| `TestReconcileRunning_Timeout_TerminatesPods` | deletes all running pods when team times out |
+| `TestReconcileRunning_BudgetExceeded_TerminatesPods` | deletes all running pods when budget is exceeded |
+| `TestReconcileTerminal_StampsCompletedAt` | stamps `completedAt` timestamp on first terminal reconcile |
+| `TestReconcileTerminal_Idempotent` | does not overwrite `completedAt` on subsequent terminal reconciles |
+| `TestReconcileTerminal_DeletesRunningPods` | deletes all team pods when entering terminal phase |
 
 #### Pod builder
 
@@ -58,6 +72,8 @@ go test ./internal/controller/... -coverprofile=cover.out && go tool cover -html
 | `TestBuildAgentPod_WithMCPServers` | `mcp-config` volume mounted at `/var/claude-mcp` |
 | `TestBuildAgentPod_CoworkMode` | workspace-output and workspace-input volumes present; no repo volume |
 | `TestBuildAgentPod_ScopeEnvVars` | `SCOPE_INCLUDE_PATHS` and `SCOPE_EXCLUDE_PATHS` set from `scope` spec |
+| `TestBuildAgentPod_OAuthAuth` | `CLAUDE_OAUTH_TOKEN` injected via SecretKeyRef when `oauthSecret` set; no API key env var |
+| `TestBuildAgentPod_AgentCommandOverride` | `AgentCommand` reconciler field overrides container command |
 
 #### Business logic
 
@@ -75,9 +91,12 @@ go test ./internal/controller/... -coverprofile=cover.out && go tool cover -html
 | `TestDependenciesMet_DepSucceeded` | returns true when dependency pod is `Succeeded` |
 | `TestDependenciesMet_DepNotSpawned` | returns false when dependency pod does not exist |
 | `TestDependenciesMet_DepStillRunning` | returns false when dependency pod is `Running` |
+| `TestDependenciesMet_DepFailed_NotMet` | returns false when dependency pod is `Failed` (only Succeeded counts) |
+| `TestDependenciesMet_AllMustSucceed` | returns false when any one of multiple deps is not yet Succeeded |
 | `TestCheckApprovalGate_NoGateDefined` | returns approved when no gate matches the event |
 | `TestCheckApprovalGate_GatePresentNotApproved` | returns not approved when gate exists but annotation absent |
 | `TestCheckApprovalGate_ApprovedViaAnnotation` | returns approved when annotation is set to `"true"` |
+| `TestSyncPodStatuses_ReflectsPodPhases` | `team.Status.Lead` and `team.Status.Teammates` reflect live pod phases |
 
 ### Test helpers
 

@@ -11,8 +11,9 @@
 //   - IsOverBudget() → bool
 //
 // Cost rates (as of April 2026):
-//   Opus 4.6:   $5/M input,  $25/M output
-//   Sonnet 4.6: $3/M input,  $15/M output
+//
+//	Opus 4.6:   $5/M input,  $25/M output
+//	Sonnet 4.6: $3/M input,  $15/M output
 //
 // Estimation heuristic:
 //   - Assume ~50K input tokens per minute of active session (model loading context)

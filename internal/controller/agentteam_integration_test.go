@@ -44,8 +44,8 @@ func codingTeam(name, namespace string) *claudev1alpha1.AgentTeam {
 				URL:    "https://github.com/example/repo",
 				Branch: "main",
 			},
-			Auth:  claudev1alpha1.AuthSpec{APIKeySecret: "api-key"},
-			Lead:  claudev1alpha1.LeadSpec{Model: "opus", Prompt: "Lead the team"},
+			Auth: claudev1alpha1.AuthSpec{APIKeySecret: "api-key"},
+			Lead: claudev1alpha1.LeadSpec{Model: "opus", Prompt: "Lead the team"},
 			Teammates: []claudev1alpha1.TeammateSpec{
 				{Name: "worker", Model: "sonnet", Prompt: "Do work"},
 			},
@@ -60,8 +60,8 @@ func coworkTeam(name, namespace string) *claudev1alpha1.AgentTeam {
 			Workspace: &claudev1alpha1.WorkspaceSpec{
 				Output: &claudev1alpha1.WorkspaceOutputSpec{Size: "1Gi"},
 			},
-			Auth:  claudev1alpha1.AuthSpec{APIKeySecret: "api-key"},
-			Lead:  claudev1alpha1.LeadSpec{Model: "opus", Prompt: "Lead"},
+			Auth: claudev1alpha1.AuthSpec{APIKeySecret: "api-key"},
+			Lead: claudev1alpha1.LeadSpec{Model: "opus", Prompt: "Lead"},
 			Teammates: []claudev1alpha1.TeammateSpec{
 				{Name: "writer", Model: "sonnet", Prompt: "Write"},
 			},
@@ -494,8 +494,8 @@ var _ = Describe("AgentTeam controller", func() {
 			team.Spec.Teammates = make([]claudev1alpha1.TeammateSpec, 17)
 			for i := range team.Spec.Teammates {
 				team.Spec.Teammates[i] = claudev1alpha1.TeammateSpec{
-					Name:  fmt.Sprintf("tm%02d", i),
-					Model: "sonnet",
+					Name:   fmt.Sprintf("tm%02d", i),
+					Model:  "sonnet",
 					Prompt: "work",
 				}
 			}

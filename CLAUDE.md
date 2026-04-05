@@ -116,7 +116,33 @@ Apache 2.0 — CAM Labs LLC
 
 This project is being developed with the goal of presenting at KubeCon NA 2026 (November 9–12, Salt Lake City). See `KUBECON.md` for the full talk framing.
 
-**Ask of Claude Code:** As you build, please help capture the story. When you hit something non-obvious — a surprising constraint, a design tradeoff, an elegant solution, or something that broke in an unexpected way — add a short entry to the **"Interesting Problems Encountered"** section in `KUBECON.md`. One paragraph is enough. These notes become the raw material for the talk narrative and are the difference between a good proposal and a great one.
+### Release Timeline
+
+All milestones and issues are tracked on GitHub. The CFP opens May/June 2026 — v0.2.0 must close before then so there is a working demo to write the proposal around.
+
+| Version | GitHub Milestone | Due | What it unlocks |
+|---------|-----------------|-----|-----------------|
+| **v0.1.0** | Initial Release | Apr 30 2026 | Core operator, 50+25+19 tests, CI — PRs #2 + #3 |
+| **v0.2.0** | Foundation & Real Runner | Jun 1 2026 | Real `claude-code-runner` image, E2E test, mailbox PVC validation, talk-ready `describe` output |
+| **v0.3.0** | Observability & Budget | Jul 15 2026 | Prometheus metrics, `internal/budget` package, webhook engine, Grafana dashboard |
+| **v0.4.0** | Resilience & RBAC | Aug 31 2026 | Crash re-spawn, per-agent ServiceAccounts, `onComplete: create-pr`, `onComplete: push-branch` |
+| **v0.5.0** | Template Engine & Helm | Sep 30 2026 | `AgentTeamTemplate`/`AgentTeamRun` controllers, production Helm chart, CONTRIBUTING.md |
+| **v1.0.0** | KubeCon Demo Polish | Oct 20 2026 | Demo script, real-API CI test, CFP submitted, OCI skill distribution |
+
+**KubeCon talk:** November 9–12 2026, Salt Lake City. CFP deadline: May/June 2026 (watch https://sessionize.com/kubecon-cloudnativecon-north-america-2026/).
+
+### Current Priority (v0.2.0)
+
+The highest-value issues for the next milestone are:
+1. **#4** — Build and publish the `claude-code-runner` Docker image (prerequisite for everything)
+2. **#6** — Validate mailbox file exchange on shared PVC in Kind (core architectural claim)
+3. **#5** — Real E2E acceptance test against Claude API
+4. **#7** — Make `kubectl describe agentteam` talk-ready (`+kubebuilder:printcolumn`, Events)
+5. **#8** — Document the RWX PVC constraint in ARCHITECTURE.md
+
+### Ask of Claude Code
+
+As you build, help capture the story. When you hit something non-obvious — a surprising constraint, a design tradeoff, an elegant solution, or something that broke in an unexpected way — add a short entry to the **"Interesting Problems Encountered"** section in `KUBECON.md`. One paragraph is enough. These notes become the raw material for the talk narrative.
 
 Specifically worth logging:
 - Anything awkward about modeling long-running agent state in a K8s reconciler
