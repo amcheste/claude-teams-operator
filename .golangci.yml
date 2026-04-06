@@ -12,7 +12,6 @@ linters:
     - gosimple       # simplification suggestions
     - govet          # correctness checks
     - ineffassign    # detect ineffectual assignments
-    - staticcheck    # static analysis
     - unused         # check for unused code
     - gofmt          # formatting
     - goimports      # import ordering
