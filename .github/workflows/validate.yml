@@ -55,6 +55,11 @@ jobs:
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@971e284b6050e8a5849b72094c50ab08da042db8 # v6
+        env:
+          # k8s.io v0.35 significantly expands the module graph; without a
+          # memory limit the runner is OOM-killed ~22 min in. GOMEMLIMIT tells
+          # the Go runtime to GC aggressively before the kernel OOM-killer fires.
+          GOMEMLIMIT: 6GiB
         with:
           version: latest
           args: --timeout=5m
