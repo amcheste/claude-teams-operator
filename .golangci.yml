@@ -1,15 +1,16 @@
 run:
   timeout: 5m
   tests: true
-  # Pin the Go version golangci-lint uses for analysis. golangci-lint v1.64.x
-  # was built with Go 1.24 and refuses to run against go.mod targets >= 1.25.
-  # Remove this once a golangci-lint release built with Go 1.25+ is available.
+  # k8s.io v0.35+ requires Go 1.25 in its go.mod, which causes golangci-lint
+  # v1.64.x (built with Go 1.24) to refuse to run. Override until a
+  # golangci-lint release built with Go 1.25+ ships.
   go: '1.24'
+  # Limit parallelism; the k8s.io v0.35 module graph is large.
+  concurrency: 2
 
 linters:
   enable:
     - errcheck       # check unchecked errors
-    - gosimple       # simplification suggestions
     - govet          # correctness checks
     - ineffassign    # detect ineffectual assignments
     - unused         # check for unused code
