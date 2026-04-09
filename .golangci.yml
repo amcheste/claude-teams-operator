@@ -1,16 +1,18 @@
+version: "2"
+
 run:
   timeout: 5m
   tests: true
+  # --concurrency=2 caps parallel analyser goroutines; k8s.io v0.35 expands
+  # the module graph significantly and was OOM-killing the CI runner.
+  concurrency: 2
 
 linters:
   enable:
     - errcheck       # check unchecked errors
-    - gosimple       # simplification suggestions
     - govet          # correctness checks
     - ineffassign    # detect ineffectual assignments
     - unused         # check for unused code
-    - gofmt          # formatting
-    - goimports      # import ordering
     - misspell       # spelling mistakes in comments/strings
     - gosec          # security checks
     - noctx          # http requests without context
@@ -18,13 +20,19 @@ linters:
     - prealloc       # slice pre-allocation suggestions
     - unconvert      # unnecessary type conversions
     - unparam        # unused function parameters
+  settings:
+    gosec:
+      excludes:
+        - G107  # url provided to HTTP request as taint input (we trust CR content)
 
-linters-settings:
-  gosec:
-    excludes:
-      - G107  # url provided to HTTP request as taint input (we trust CR content)
-  goimports:
-    local-prefixes: github.com/amcheste/claude-teams-operator
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/amcheste/claude-teams-operator
 
 issues:
   exclude-rules:
