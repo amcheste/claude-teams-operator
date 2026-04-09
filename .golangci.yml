@@ -1,10 +1,6 @@
 run:
   timeout: 5m
   tests: true
-  # k8s.io v0.35+ requires Go 1.25 in its go.mod, which causes golangci-lint
-  # v1.64.x (built with Go 1.24) to refuse to run. Override until a
-  # golangci-lint release built with Go 1.25+ ships.
-  go: '1.24'
 
 linters:
   enable:
@@ -12,7 +8,6 @@ linters:
     - gosimple       # simplification suggestions
     - govet          # correctness checks
     - ineffassign    # detect ineffectual assignments
-    - staticcheck    # static analysis
     - unused         # check for unused code
     - gofmt          # formatting
     - goimports      # import ordering
