@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -1391,6 +1394,232 @@ func TestEnsureAgentPod_NoMCPServers_SkipsConfigMap(t *testing.T) {
 	}, &cm)
 	assert.True(t, errors.IsNotFound(err),
 		"no MCP ConfigMap should be created when mcpServers is empty")
+}
+
+// --- executeOnComplete and sendWebhookEvent (issue #27) ---
+
+// TestExecuteOnComplete_NotifyWithWebhook_PostsPayload exercises the happy path
+// of the "notify" branch: when Lifecycle.OnComplete is "notify" and a webhook
+// is configured, executeOnComplete must POST a JSON payload to the webhook URL
+// containing the team name, namespace, phase, and event="completed".
+func TestExecuteOnComplete_NotifyWithWebhook_PostsPayload(t *testing.T) {
+	var capturedBody []byte
+	var capturedMethod string
+	var capturedContentType string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedMethod = r.Method
+		capturedContentType = r.Header.Get("Content-Type")
+		body, _ := io.ReadAll(r.Body)
+		capturedBody = body
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	team := minimalTeam("notify-team")
+	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{OnComplete: "notify"}
+	team.Spec.Observability = &claudev1alpha1.ObservabilitySpec{
+		Webhook: &claudev1alpha1.WebhookSpec{
+			URL:    server.URL,
+			Events: []string{"completed"},
+		},
+	}
+	team.Status.Phase = "Running" // phase at the time of the webhook fire
+
+	r := newReconciler(team)
+	require.NoError(t, r.executeOnComplete(context.Background(), team))
+
+	// Verify the webhook was actually called.
+	assert.Equal(t, http.MethodPost, capturedMethod, "executeOnComplete must POST")
+	assert.Equal(t, "application/json", capturedContentType,
+		"webhook payload must be JSON")
+
+	var payload map[string]string
+	require.NoError(t, json.Unmarshal(capturedBody, &payload))
+	assert.Equal(t, "completed", payload["event"], "event must be \"completed\" for OnComplete notify")
+	assert.Equal(t, "notify-team", payload["team"])
+	assert.Equal(t, "default", payload["namespace"])
+	assert.Equal(t, "Running", payload["phase"], "phase reflects team state at webhook time")
+}
+
+// TestExecuteOnComplete_NotifyWithoutWebhook_NoOp covers the "notify" branch
+// when no Webhook is configured: the function must short-circuit to nil
+// without erroring rather than dereferencing a nil Webhook.
+func TestExecuteOnComplete_NotifyWithoutWebhook_NoOp(t *testing.T) {
+	team := minimalTeam("notify-no-webhook")
+	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{OnComplete: "notify"}
+	// Observability set, but Webhook nil.
+	team.Spec.Observability = &claudev1alpha1.ObservabilitySpec{LogLevel: "info"}
+
+	r := newReconciler(team)
+	require.NoError(t, r.executeOnComplete(context.Background(), team),
+		"OnComplete=notify with no webhook must be a silent no-op, not an error")
+}
+
+// TestExecuteOnComplete_NotifyWithoutObservability_NoOp covers the case where
+// Observability itself is nil — exercises the outer guard on the notify branch.
+func TestExecuteOnComplete_NotifyWithoutObservability_NoOp(t *testing.T) {
+	team := minimalTeam("notify-no-obs")
+	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{OnComplete: "notify"}
+	// Observability nil entirely.
+
+	r := newReconciler(team)
+	require.NoError(t, r.executeOnComplete(context.Background(), team),
+		"OnComplete=notify with no Observability must be a silent no-op")
+}
+
+// TestExecuteOnComplete_CreatePR_StubReturnsNil covers the "create-pr" log-only
+// stub. Until #4/#7 land the real implementation, this branch must just log
+// and return nil so the team still finishes cleanly.
+func TestExecuteOnComplete_CreatePR_StubReturnsNil(t *testing.T) {
+	team := minimalTeam("create-pr-team")
+	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{OnComplete: "create-pr"}
+
+	r := newReconciler(team)
+	assert.NoError(t, r.executeOnComplete(context.Background(), team),
+		"create-pr stub must return nil so completion isn't blocked")
+}
+
+// TestExecuteOnComplete_PushBranch_StubReturnsNil covers the "push-branch"
+// log-only stub for the same reason as create-pr.
+func TestExecuteOnComplete_PushBranch_StubReturnsNil(t *testing.T) {
+	team := minimalTeam("push-branch-team")
+	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{OnComplete: "push-branch"}
+
+	r := newReconciler(team)
+	assert.NoError(t, r.executeOnComplete(context.Background(), team),
+		"push-branch stub must return nil so completion isn't blocked")
+}
+
+// TestSendWebhookEvent_HappyPath verifies that sendWebhookEvent POSTs the
+// expected JSON shape and returns nil when the server responds 2xx.
+func TestSendWebhookEvent_HappyPath(t *testing.T) {
+	var capturedBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		capturedBody = body
+		w.WriteHeader(http.StatusAccepted) // 202 — also a 2xx
+	}))
+	defer server.Close()
+
+	team := minimalTeam("webhook-happy")
+	team.Status.Phase = "Initializing"
+	r := newReconciler(team)
+
+	require.NoError(t, r.sendWebhookEvent(context.Background(), server.URL, "spawn-worker", team))
+
+	var payload map[string]string
+	require.NoError(t, json.Unmarshal(capturedBody, &payload))
+	assert.Equal(t, "spawn-worker", payload["event"])
+	assert.Equal(t, "webhook-happy", payload["team"])
+	assert.Equal(t, "default", payload["namespace"])
+	assert.Equal(t, "Initializing", payload["phase"])
+}
+
+// TestSendWebhookEvent_Non2xxReturnsError verifies that a 4xx/5xx response
+// from the webhook is reported as an error so callers can log/surface it.
+func TestSendWebhookEvent_Non2xxReturnsError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	team := minimalTeam("webhook-500")
+	r := newReconciler(team)
+
+	err := r.sendWebhookEvent(context.Background(), server.URL, "completed", team)
+	require.Error(t, err, "non-2xx webhook responses must return an error")
+	assert.Contains(t, err.Error(), "500", "error message should include the HTTP status code")
+}
+
+// TestSendWebhookEvent_BadURLReturnsError covers the http.NewRequestWithContext
+// error path: an unparseable URL must surface as an error rather than panicking.
+func TestSendWebhookEvent_BadURLReturnsError(t *testing.T) {
+	team := minimalTeam("webhook-badurl")
+	r := newReconciler(team)
+
+	err := r.sendWebhookEvent(context.Background(), "http://\x7f-bad-host/", "completed", team)
+	require.Error(t, err, "an invalid webhook URL must return an error, not panic")
+}
+
+// TestReconcileRunning_OnNotifyCompletion_FiresWebhookAndCompletes is the
+// integration test for the issue: when reconcileRunning detects all pods done
+// and OnComplete is "notify", it must (1) fire the webhook and (2) still set
+// Phase=Completed. This pins the contract between the reconciler and the
+// post-completion hook.
+func TestReconcileRunning_OnNotifyCompletion_FiresWebhookAndCompletes(t *testing.T) {
+	var webhookCalled bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		webhookCalled = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	team := minimalTeam("notify-complete")
+	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{OnComplete: "notify"}
+	team.Spec.Observability = &claudev1alpha1.ObservabilitySpec{
+		Webhook: &claudev1alpha1.WebhookSpec{
+			URL:    server.URL,
+			Events: []string{"completed"},
+		},
+	}
+	startTime := metav1.NewTime(time.Now().Add(-1 * time.Minute))
+	team.Status.StartedAt = &startTime
+	team.Status.Phase = "Running"
+
+	leadPod := succeededPod("notify-complete-lead", "default", "notify-complete")
+	workerPod := succeededPod("notify-complete-worker", "default", "notify-complete")
+
+	r := newReconciler(team, leadPod, workerPod)
+	team = fetch(t, r, "notify-complete")
+	team.Status.Phase = "Running"
+	team.Status.StartedAt = &startTime
+	ctx := context.Background()
+
+	_, err := r.reconcileRunning(ctx, team)
+	require.NoError(t, err)
+	assert.True(t, webhookCalled, "reconcileRunning must invoke the notify webhook on completion")
+
+	fetched := fetch(t, r, "notify-complete")
+	assert.Equal(t, "Completed", fetched.Status.Phase,
+		"team must reach Completed even though the webhook side-effect was performed")
+}
+
+// TestReconcileRunning_WebhookFailureDoesNotBlockCompletion verifies the
+// "post-completion actions are non-fatal" contract: if the webhook returns 500,
+// the reconciler must still mark the team Completed and not bubble the error.
+func TestReconcileRunning_WebhookFailureDoesNotBlockCompletion(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	team := minimalTeam("notify-fail")
+	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{OnComplete: "notify"}
+	team.Spec.Observability = &claudev1alpha1.ObservabilitySpec{
+		Webhook: &claudev1alpha1.WebhookSpec{
+			URL:    server.URL,
+			Events: []string{"completed"},
+		},
+	}
+	startTime := metav1.NewTime(time.Now().Add(-1 * time.Minute))
+	team.Status.StartedAt = &startTime
+	team.Status.Phase = "Running"
+
+	leadPod := succeededPod("notify-fail-lead", "default", "notify-fail")
+	workerPod := succeededPod("notify-fail-worker", "default", "notify-fail")
+
+	r := newReconciler(team, leadPod, workerPod)
+	team = fetch(t, r, "notify-fail")
+	team.Status.Phase = "Running"
+	team.Status.StartedAt = &startTime
+	ctx := context.Background()
+
+	_, err := r.reconcileRunning(ctx, team)
+	require.NoError(t, err, "reconcileRunning must swallow webhook errors")
+
+	fetched := fetch(t, r, "notify-fail")
+	assert.Equal(t, "Completed", fetched.Status.Phase,
+		"webhook failure must NOT block transition to Completed")
 }
 
 // --- Pod/Volume introspection helpers ---
