@@ -287,6 +287,27 @@ var _ = Describe("AgentTeam controller", func() {
 			Expect(k8sClient.Get(ctx, nn(team.Name+"-init", namespace),
 				&batchv1.Job{})).To(MatchError(errors.IsNotFound, "IsNotFound"))
 		})
+
+		It("deploys lead and teammate pods with no repo volume or WORKTREE_PATH", func() {
+			waitForPhase(team.Name, namespace, "Running")
+			waitForPod(team.Name+"-lead", namespace)
+			waitForPod(team.Name+"-writer", namespace)
+
+			// Verify no repo volume is mounted on either pod.
+			for _, podName := range []string{team.Name + "-lead", team.Name + "-writer"} {
+				var pod corev1.Pod
+				Expect(k8sClient.Get(ctx, nn(podName, namespace), &pod)).To(Succeed())
+
+				volumeNames := []string{}
+				for _, v := range pod.Spec.Volumes {
+					volumeNames = append(volumeNames, v.Name)
+				}
+				Expect(volumeNames).NotTo(ContainElement("repo"), "cowork pod %s should not have a repo volume", podName)
+
+				env := envMap(pod)
+				Expect(env).NotTo(HaveKey("WORKTREE_PATH"), "cowork pod %s should not have WORKTREE_PATH", podName)
+			}
+		})
 	})
 
 	Describe("Initializing phase — coding mode", func() {
@@ -404,6 +425,34 @@ var _ = Describe("AgentTeam controller", func() {
 				g.Expect(t.Status.Lead).NotTo(BeNil())
 				g.Expect(t.Status.Lead.Phase).To(Equal("Completed"))
 			}).Should(Succeed())
+		})
+
+		It("deletes all team pods during terminal phase and sets a stable completedAt", func() {
+			succeedPod(team.Name+"-lead", namespace)
+			succeedPod(team.Name+"-worker", namespace)
+			waitForPhase(team.Name, namespace, "Completed")
+
+			// Verify reconcileTerminal deletes the pods.
+			expectPodGone(team.Name+"-lead", namespace)
+			expectPodGone(team.Name+"-worker", namespace)
+
+			// Verify completedAt is set and stable across reconciles.
+			var first metav1.Time
+			Eventually(func(g Gomega) {
+				var t claudev1alpha1.AgentTeam
+				g.Expect(k8sClient.Get(ctx, nn(team.Name, namespace), &t)).To(Succeed())
+				g.Expect(t.Status.CompletedAt).NotTo(BeNil())
+				first = *t.Status.CompletedAt
+			}).Should(Succeed())
+
+			// Poke to trigger another reconcile and confirm completedAt does not change.
+			pokeTeam(team.Name, namespace)
+			Consistently(func(g Gomega) {
+				var t claudev1alpha1.AgentTeam
+				g.Expect(k8sClient.Get(ctx, nn(team.Name, namespace), &t)).To(Succeed())
+				g.Expect(t.Status.CompletedAt).NotTo(BeNil())
+				g.Expect(t.Status.CompletedAt.Time).To(Equal(first.Time), "completedAt should be stable across reconciles")
+			}).WithTimeout(3 * time.Second).Should(Succeed())
 		})
 	})
 
