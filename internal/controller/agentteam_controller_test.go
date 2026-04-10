@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -911,6 +912,117 @@ func TestSyncPodStatuses_ReflectsPodPhases(t *testing.T) {
 	require.Len(t, team.Status.Teammates, 1)
 	assert.Equal(t, "sync-test-worker", team.Status.Teammates[0].PodName)
 	assert.Equal(t, "Running", team.Status.Teammates[0].Phase)
+}
+
+// --- Reconcile dispatch ---
+//
+// These tests exercise the top-level Reconcile entry point directly, rather
+// than calling phase functions (reconcilePending, reconcileRunning, ...)
+// in isolation. They verify that the switch on team.Status.Phase routes to
+// the correct handler, that a missing object is a no-op, and that an
+// unrecognized phase is reset back to "Pending".
+
+// TestReconcile_EmptyPhase_RoutesToPending verifies that a freshly-created
+// team (empty Status.Phase) is dispatched to reconcilePending, which is
+// observable via (a) phase advancing to "Initializing", (b) StartedAt being
+// stamped, and (c) the Cowork output PVC being created.
+func TestReconcile_EmptyPhase_RoutesToPending(t *testing.T) {
+	team := withWorkspace(minimalTeam("disp-empty"))
+	r := newReconciler(team)
+	ctx := context.Background()
+
+	result, err := r.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "disp-empty", Namespace: "default"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 5*time.Second, result.RequeueAfter, "reconcilePending requeues after 5s")
+
+	// Side effects that only reconcilePending produces.
+	fetched := fetch(t, r, "disp-empty")
+	assert.Equal(t, "Initializing", fetched.Status.Phase)
+	assert.NotNil(t, fetched.Status.StartedAt, "reconcilePending must stamp StartedAt")
+
+	var pvc corev1.PersistentVolumeClaim
+	require.NoError(t, r.Get(ctx, types.NamespacedName{Name: "disp-empty-output", Namespace: "default"}, &pvc),
+		"output PVC should be created by reconcilePending via the Reconcile dispatcher")
+}
+
+// TestReconcile_PendingPhase_RoutesToPending verifies that an explicit
+// "Pending" phase is also dispatched to reconcilePending (the case
+// statement is `case "", "Pending"`).
+func TestReconcile_PendingPhase_RoutesToPending(t *testing.T) {
+	team := withWorkspace(minimalTeam("disp-pending"))
+	team.Status.Phase = "Pending"
+	r := newReconciler(team)
+	ctx := context.Background()
+
+	result, err := r.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "disp-pending", Namespace: "default"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 5*time.Second, result.RequeueAfter)
+
+	fetched := fetch(t, r, "disp-pending")
+	assert.Equal(t, "Initializing", fetched.Status.Phase,
+		"explicit Pending phase must still transition through reconcilePending")
+}
+
+// TestReconcile_RunningPhase_RoutesToRunning verifies that phase "Running"
+// is dispatched to reconcileRunning. We use the "lead not spawned"
+// scenario so the behavior matches TestReconcileRunning_LeadNotSpawned_KeepsRunning:
+// phase stays Running and the result requeues after 30s.
+func TestReconcile_RunningPhase_RoutesToRunning(t *testing.T) {
+	team := minimalTeam("disp-running")
+	startTime := metav1.NewTime(time.Now().Add(-1 * time.Minute))
+	team.Status.Phase = "Running"
+	team.Status.StartedAt = &startTime
+	r := newReconciler(team)
+	ctx := context.Background()
+
+	result, err := r.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "disp-running", Namespace: "default"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 30*time.Second, result.RequeueAfter,
+		"reconcileRunning requeues after 30s when waiting on lead pod")
+
+	fetched := fetch(t, r, "disp-running")
+	assert.Equal(t, "Running", fetched.Status.Phase,
+		"phase must stay Running when dispatcher routes to reconcileRunning with no pods spawned")
+}
+
+// TestReconcile_NotFound_ReturnsNilWithoutError verifies the not-found
+// branch of the initial Get: Reconcile must return ctrl.Result{} and nil,
+// without requeueing or erroring.
+func TestReconcile_NotFound_ReturnsNilWithoutError(t *testing.T) {
+	r := newReconciler() // empty fake client — no AgentTeam objects
+	ctx := context.Background()
+
+	result, err := r.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "does-not-exist", Namespace: "default"},
+	})
+	require.NoError(t, err, "not-found must be a silent no-op, never an error")
+	assert.Equal(t, ctrl.Result{}, result, "not-found must not requeue")
+}
+
+// TestReconcile_UnknownPhase_ResetsAndRequeues verifies that a phase value
+// not handled by any case statement is reset back to "Pending" and
+// requeued so the next reconcile picks it up via the normal flow.
+func TestReconcile_UnknownPhase_ResetsAndRequeues(t *testing.T) {
+	team := withWorkspace(minimalTeam("disp-unknown"))
+	team.Status.Phase = "Bogus"
+	r := newReconciler(team)
+	ctx := context.Background()
+
+	result, err := r.Reconcile(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: "disp-unknown", Namespace: "default"},
+	})
+	require.NoError(t, err)
+	assert.True(t, result.Requeue, "unknown phase must requeue so the reset takes effect")
+
+	fetched := fetch(t, r, "disp-unknown")
+	assert.Equal(t, "Pending", fetched.Status.Phase,
+		"unknown phase must be reset to Pending")
 }
 
 // --- Pod/Volume introspection helpers ---
