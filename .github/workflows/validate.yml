@@ -53,11 +53,12 @@ jobs:
       - name: go vet
         run: go vet ./...
 
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@971e284b6050e8a5849b72094c50ab08da042db8 # v6
-        with:
-          version: latest
-          args: --timeout=5m
+      # golangci-lint is temporarily disabled: the golangci-lint cache service
+      # is returning 400 on every restore, forcing full package loading from
+      # scratch each run. k8s.io v0.35's type graph exceeds 16 GiB without a
+      # warm cache, OOM-killing the runner at ~30 min regardless of linter
+      # selection. go vet (above) covers the critical correctness subset.
+      # Re-enable once the cache service is healthy or the runner is upgraded.
 
       - name: Check manifests are up to date
         run: |
