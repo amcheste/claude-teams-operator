@@ -7,12 +7,13 @@ run:
   go: '1.24'
 
 linters:
-  # Type-checking linters (errcheck, unused, gosec, noctx, bodyclose,
-  # unconvert, unparam) are temporarily disabled on this branch. k8s.io v0.35
-  # expands the transitive module graph enough that loading full type info
-  # OOM-kills the 16 GiB CI runner before analysis completes. go vet (run as
-  # a separate step) covers the critical correctness subset. Re-enable once
-  # golangci-lint ships with a leaner type-loader or the runner is upgraded.
+  # Type-checking linters (errcheck, unused, govet, gosec, noctx, bodyclose,
+  # unconvert, unparam) require golangci-lint to load full type info for the
+  # entire transitive dependency graph. k8s.io v0.35 makes that graph large
+  # enough to OOM-kill the 16 GiB CI runner before analysis completes.
+  # go vet (run as a separate step) covers the critical correctness subset.
+  # Re-enable type-checking linters once golangci-lint ships with a leaner
+  # type-loader or the runner is upgraded.
   enable:
     - ineffassign    # detect ineffectual assignments (AST-only)
     - misspell       # spelling mistakes in comments/strings (AST-only)

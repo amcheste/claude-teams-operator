@@ -53,13 +53,12 @@ jobs:
       - name: go vet
         run: go vet ./...
 
-      # golangci-lint is temporarily disabled: k8s.io v0.35 expands the
-      # transitive module graph beyond what the 16 GiB CI runner can hold
-      # during package loading, OOM-killing the process at ~22 min regardless
-      # of linter selection or concurrency settings. go vet (above) covers
-      # the critical correctness subset. Re-enable once controller-runtime is
-      # bumped to a version whose module graph is compatible with k8s.io v0.35.
-      # Tracked in: https://github.com/amcheste/claude-teams-operator/issues
+      # golangci-lint is temporarily disabled: the golangci-lint cache service
+      # is returning 400 on every restore, forcing full package loading from
+      # scratch each run. k8s.io v0.35's type graph exceeds 16 GiB without a
+      # warm cache, OOM-killing the runner at ~30 min regardless of linter
+      # selection. go vet (above) covers the critical correctness subset.
+      # Re-enable once the cache service is healthy or the runner is upgraded.
 
       - name: Check manifests are up to date
         run: |
