@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -1192,6 +1193,204 @@ func TestPVCAccessMode_DefaultWhenUnset(t *testing.T) {
 	r.PVCAccessMode = corev1.ReadWriteOnce
 	assert.Equal(t, corev1.ReadWriteOnce, r.pvcAccessMode(),
 		"pvcAccessMode must return the override when PVCAccessMode is set")
+}
+
+// --- MCP ConfigMap (issue #26) ---
+
+// decodeMCPConfig parses the JSON stored in the per-agent MCP ConfigMap and
+// returns the mcpServers map. Shared helper for the MCP test suite.
+func decodeMCPConfig(t *testing.T, cm *corev1.ConfigMap) map[string]map[string]string {
+	t.Helper()
+	raw, ok := cm.Data["mcp.json"]
+	require.True(t, ok, "ConfigMap must contain an mcp.json key")
+
+	var wrapped struct {
+		MCPServers map[string]map[string]string `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(raw), &wrapped),
+		"mcp.json must be valid JSON wrapped in {\"mcpServers\": {...}}")
+	return wrapped.MCPServers
+}
+
+// TestEnsureMCPConfigMap_CreatesConfigMapWithCorrectJSON exercises the happy
+// path of ensureMCPConfigMap: the ConfigMap does not yet exist, so it must be
+// created with the correct name, namespace, and {"mcpServers": {...}} JSON
+// structure. Servers are stored with type "sse" and the configured URL.
+func TestEnsureMCPConfigMap_CreatesConfigMapWithCorrectJSON(t *testing.T) {
+	team := minimalTeam("mcp-create")
+	r := newReconciler(team)
+	ctx := context.Background()
+
+	servers := []claudev1alpha1.MCPServerSpec{
+		{Name: "gmail", URL: "https://gmail.mcp.example.com/mcp"},
+	}
+	require.NoError(t, r.ensureMCPConfigMap(ctx, team, "worker", servers))
+
+	var cm corev1.ConfigMap
+	require.NoError(t, r.Get(ctx, types.NamespacedName{
+		Name:      "mcp-create-worker-mcp",
+		Namespace: "default",
+	}, &cm), "ensureMCPConfigMap must create a ConfigMap named {team}-{agent}-mcp")
+
+	// Owner reference points back at the AgentTeam so garbage collection works.
+	require.Len(t, cm.OwnerReferences, 1)
+	assert.Equal(t, team.Name, cm.OwnerReferences[0].Name)
+	assert.Equal(t, "AgentTeam", cm.OwnerReferences[0].Kind)
+
+	// JSON structure: {"mcpServers": {"gmail": {"type": "sse", "url": "..."}}}
+	mcpServers := decodeMCPConfig(t, &cm)
+	require.Contains(t, mcpServers, "gmail", "gmail server must be in the mcpServers map")
+	assert.Equal(t, "sse", mcpServers["gmail"]["type"],
+		"MCP server type must be \"sse\" — Claude Code currently only supports SSE transport here")
+	assert.Equal(t, "https://gmail.mcp.example.com/mcp", mcpServers["gmail"]["url"])
+}
+
+// TestEnsureMCPConfigMap_Idempotent verifies that calling ensureMCPConfigMap a
+// second time is a no-op (does not error, does not re-create). This matters
+// because reconcile runs repeatedly and the function must tolerate being
+// invoked after the ConfigMap is already present.
+func TestEnsureMCPConfigMap_Idempotent(t *testing.T) {
+	team := minimalTeam("mcp-idempotent")
+	r := newReconciler(team)
+	ctx := context.Background()
+
+	servers := []claudev1alpha1.MCPServerSpec{
+		{Name: "gmail", URL: "https://gmail.mcp.example.com/mcp"},
+	}
+	require.NoError(t, r.ensureMCPConfigMap(ctx, team, "worker", servers))
+
+	// Second call must not error even though the ConfigMap already exists.
+	require.NoError(t, r.ensureMCPConfigMap(ctx, team, "worker", servers),
+		"ensureMCPConfigMap must be idempotent so repeated reconciles don't fail")
+
+	// There must still be exactly one ConfigMap with that name.
+	var cmList corev1.ConfigMapList
+	require.NoError(t, r.List(ctx, &cmList, client.InNamespace("default")))
+	count := 0
+	for _, cm := range cmList.Items {
+		if cm.Name == "mcp-idempotent-worker-mcp" {
+			count++
+		}
+	}
+	assert.Equal(t, 1, count, "ensureMCPConfigMap must not duplicate the ConfigMap on a second call")
+}
+
+// TestEnsureMCPConfigMap_MultipleServers verifies that multi-server input
+// produces one entry per server in the generated JSON, each with the correct
+// URL. This pins the per-server loop behavior.
+func TestEnsureMCPConfigMap_MultipleServers(t *testing.T) {
+	team := minimalTeam("mcp-multi")
+	r := newReconciler(team)
+	ctx := context.Background()
+
+	servers := []claudev1alpha1.MCPServerSpec{
+		{Name: "gmail", URL: "https://gmail.mcp.example.com/mcp"},
+		{Name: "calendar", URL: "https://cal.mcp.example.com/mcp"},
+		{Name: "slack", URL: "https://slack.mcp.example.com/mcp"},
+	}
+	require.NoError(t, r.ensureMCPConfigMap(ctx, team, "worker", servers))
+
+	var cm corev1.ConfigMap
+	require.NoError(t, r.Get(ctx, types.NamespacedName{
+		Name:      "mcp-multi-worker-mcp",
+		Namespace: "default",
+	}, &cm))
+
+	mcpServers := decodeMCPConfig(t, &cm)
+	assert.Len(t, mcpServers, 3, "all three MCP servers must be present in the JSON")
+	assert.Equal(t, "https://gmail.mcp.example.com/mcp", mcpServers["gmail"]["url"])
+	assert.Equal(t, "https://cal.mcp.example.com/mcp", mcpServers["calendar"]["url"])
+	assert.Equal(t, "https://slack.mcp.example.com/mcp", mcpServers["slack"]["url"])
+	for name, entry := range mcpServers {
+		assert.Equal(t, "sse", entry["type"], "server %s must have type=sse", name)
+	}
+}
+
+// TestEnsureAgentPod_WithMCPServers_CreatesConfigMapBeforePod exercises the
+// integration between ensureAgentPod and ensureMCPConfigMap: when mcpServers
+// are supplied, the ConfigMap must be created alongside the pod so the pod's
+// "mcp-config" volume has a backing object at mount time.
+func TestEnsureAgentPod_WithMCPServers_CreatesConfigMapBeforePod(t *testing.T) {
+	team := minimalTeam("mcp-pod")
+	r := newReconciler(team)
+	ctx := context.Background()
+
+	servers := []claudev1alpha1.MCPServerSpec{
+		{Name: "gmail", URL: "https://gmail.mcp.example.com/mcp"},
+	}
+
+	require.NoError(t, r.ensureAgentPod(ctx, team, "worker", "sonnet", "do work",
+		"auto-accept", false, corev1.ResourceRequirements{}, nil, nil, servers))
+
+	// The ConfigMap must exist — otherwise the pod's mcp-config volume would
+	// fail to mount on a real cluster.
+	var cm corev1.ConfigMap
+	require.NoError(t, r.Get(ctx, types.NamespacedName{
+		Name:      "mcp-pod-worker-mcp",
+		Namespace: "default",
+	}, &cm), "ensureAgentPod must create the MCP ConfigMap when mcpServers are set")
+
+	// And the pod must reference it via the mcp-config volume.
+	var pod corev1.Pod
+	require.NoError(t, r.Get(ctx, types.NamespacedName{
+		Name:      "mcp-pod-worker",
+		Namespace: "default",
+	}, &pod))
+
+	var foundMCPVol bool
+	for _, v := range pod.Spec.Volumes {
+		if v.Name == "mcp-config" {
+			require.NotNil(t, v.ConfigMap, "mcp-config volume must be ConfigMap-backed")
+			assert.Equal(t, "mcp-pod-worker-mcp", v.ConfigMap.Name,
+				"mcp-config volume must reference the per-agent MCP ConfigMap")
+			foundMCPVol = true
+			break
+		}
+	}
+	assert.True(t, foundMCPVol, "pod must have an mcp-config volume when MCP servers are configured")
+}
+
+// TestEnsureAgentPod_Idempotent verifies the early-return branch when the pod
+// already exists. ensureAgentPod is called on every reconcile loop, so it must
+// short-circuit when the pod is present rather than erroring on AlreadyExists.
+func TestEnsureAgentPod_Idempotent(t *testing.T) {
+	team := minimalTeam("idem-pod")
+	r := newReconciler(team)
+	ctx := context.Background()
+
+	require.NoError(t, r.ensureAgentPod(ctx, team, "worker", "sonnet", "do work",
+		"auto-accept", false, corev1.ResourceRequirements{}, nil, nil, nil))
+
+	// Second call must be a no-op — no error, pod still present.
+	require.NoError(t, r.ensureAgentPod(ctx, team, "worker", "sonnet", "do work",
+		"auto-accept", false, corev1.ResourceRequirements{}, nil, nil, nil),
+		"ensureAgentPod must be idempotent so repeated reconciles don't fail")
+
+	var pod corev1.Pod
+	require.NoError(t, r.Get(ctx, types.NamespacedName{
+		Name:      "idem-pod-worker",
+		Namespace: "default",
+	}, &pod))
+}
+
+// TestEnsureAgentPod_NoMCPServers_SkipsConfigMap verifies the negative path:
+// without mcpServers the ConfigMap guard in ensureAgentPod must not run, and
+// no MCP ConfigMap should be created.
+func TestEnsureAgentPod_NoMCPServers_SkipsConfigMap(t *testing.T) {
+	team := minimalTeam("mcp-none")
+	r := newReconciler(team)
+	ctx := context.Background()
+
+	require.NoError(t, r.ensureAgentPod(ctx, team, "worker", "sonnet", "do work",
+		"auto-accept", false, corev1.ResourceRequirements{}, nil, nil, nil))
+
+	var cm corev1.ConfigMap
+	err := r.Get(ctx, types.NamespacedName{
+		Name:      "mcp-none-worker-mcp",
+		Namespace: "default",
+	}, &cm)
+	assert.True(t, errors.IsNotFound(err),
+		"no MCP ConfigMap should be created when mcpServers is empty")
 }
 
 // --- Pod/Volume introspection helpers ---
