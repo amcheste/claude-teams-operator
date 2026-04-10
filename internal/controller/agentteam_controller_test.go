@@ -1025,6 +1025,175 @@ func TestReconcile_UnknownPhase_ResetsAndRequeues(t *testing.T) {
 		"unknown phase must be reset to Pending")
 }
 
+// --- Small helper coverage gaps (issue #28) ---
+
+// TestBuildAgentPod_CoworkMode_PVCInput exercises the pvcVolumeReadOnly branch
+// of the workspace-inputs loop by setting workspace.inputs[].pvc instead of
+// configMap. The resulting pod must mount the named PVC as a read-only volume.
+func TestBuildAgentPod_CoworkMode_PVCInput(t *testing.T) {
+	team := withWorkspace(minimalTeam("cowork-pvc-test"))
+	team.Spec.Workspace.Inputs = []claudev1alpha1.WorkspaceInputSpec{
+		{PVC: "shared-dataset", MountPath: "/workspace/data"},
+	}
+	r := newReconciler(team)
+
+	pod := r.buildAgentPod(team, "worker", "sonnet", "do work", "auto-accept", false,
+		corev1.ResourceRequirements{}, nil, nil, nil)
+
+	// The PVC-backed input must appear as workspace-input-0 and be read-only.
+	var inputVol *corev1.Volume
+	for i := range pod.Spec.Volumes {
+		if pod.Spec.Volumes[i].Name == "workspace-input-0" {
+			inputVol = &pod.Spec.Volumes[i]
+			break
+		}
+	}
+	require.NotNil(t, inputVol, "workspace-input-0 volume should be created for PVC input")
+	require.NotNil(t, inputVol.PersistentVolumeClaim, "input volume should be PVC-backed, not ConfigMap")
+	assert.Equal(t, "shared-dataset", inputVol.PersistentVolumeClaim.ClaimName)
+	assert.True(t, inputVol.PersistentVolumeClaim.ReadOnly,
+		"PVC-backed workspace inputs must be mounted read-only")
+
+	// The mount path from the spec is propagated to the container.
+	mounts := mountPaths(pod)
+	assert.Contains(t, mounts, "/workspace/data")
+}
+
+// TestPodPhaseToAgentPhase covers every branch of the switch including the
+// default/unknown case. The default must fall through to "Pending" so the
+// reconciler keeps waiting rather than treating an unrecognized pod as terminal.
+func TestPodPhaseToAgentPhase(t *testing.T) {
+	cases := []struct {
+		name     string
+		phase    corev1.PodPhase
+		expected string
+	}{
+		{"Pending", corev1.PodPending, "Pending"},
+		{"Running", corev1.PodRunning, "Running"},
+		{"Succeeded", corev1.PodSucceeded, "Completed"},
+		{"Failed", corev1.PodFailed, "Failed"},
+		{"EmptyFallsThroughToPending", "", "Pending"},
+		{"UnknownFallsThroughToPending", corev1.PodPhase("Weird"), "Pending"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pod := &corev1.Pod{Status: corev1.PodStatus{Phase: tc.phase}}
+			assert.Equal(t, tc.expected, podPhaseToAgentPhase(pod))
+		})
+	}
+}
+
+// TestSetTeammatePendingApproval_AppendsNewEntry covers the append branch:
+// when the teammate has no existing TeammateStatus entry, setTeammatePendingApproval
+// must append a new one rather than silently dropping the request.
+func TestSetTeammatePendingApproval_AppendsNewEntry(t *testing.T) {
+	r := &AgentTeamReconciler{}
+	team := minimalTeam("append-test")
+	// No pre-existing teammate status entries.
+	require.Empty(t, team.Status.Teammates)
+
+	r.setTeammatePendingApproval(team, "worker", "spawn-worker")
+
+	require.Len(t, team.Status.Teammates, 1, "new teammate status entry must be appended")
+	assert.Equal(t, "worker", team.Status.Teammates[0].Name)
+	assert.Equal(t, "spawn-worker", team.Status.Teammates[0].PendingApproval)
+}
+
+// TestSetTeammatePendingApproval_UpdatesExistingEntry covers the in-place
+// update branch: when a TeammateStatus entry already exists for the named
+// teammate, setTeammatePendingApproval must overwrite its PendingApproval
+// rather than appending a duplicate row.
+func TestSetTeammatePendingApproval_UpdatesExistingEntry(t *testing.T) {
+	r := &AgentTeamReconciler{}
+	team := minimalTeam("update-test")
+	team.Status.Teammates = []claudev1alpha1.TeammateStatus{
+		{Name: "worker", PendingApproval: ""},
+		{Name: "reviewer", PendingApproval: ""},
+	}
+
+	r.setTeammatePendingApproval(team, "reviewer", "spawn-reviewer")
+
+	require.Len(t, team.Status.Teammates, 2, "no new entry should be appended when one already exists")
+	assert.Equal(t, "", team.Status.Teammates[0].PendingApproval, "unrelated teammate must not be touched")
+	assert.Equal(t, "spawn-reviewer", team.Status.Teammates[1].PendingApproval,
+		"existing teammate's PendingApproval must be updated in place")
+}
+
+// TestClearTeammatePendingApproval_NotFoundIsNoop covers the fall-through
+// branch: calling clear on a teammate name that isn't in the status slice must
+// leave the slice untouched rather than panic or append a phantom entry.
+func TestClearTeammatePendingApproval_NotFoundIsNoop(t *testing.T) {
+	r := &AgentTeamReconciler{}
+	team := minimalTeam("clear-missing-test")
+	team.Status.Teammates = []claudev1alpha1.TeammateStatus{
+		{Name: "worker", PendingApproval: "spawn-worker"},
+	}
+
+	r.clearTeammatePendingApproval(team, "ghost")
+
+	require.Len(t, team.Status.Teammates, 1, "clear on missing name must not append or drop entries")
+	assert.Equal(t, "worker", team.Status.Teammates[0].Name)
+	assert.Equal(t, "spawn-worker", team.Status.Teammates[0].PendingApproval,
+		"existing teammate status must be left untouched")
+}
+
+// TestClearTeammatePendingApproval_ClearsExistingEntry covers the matched-entry
+// branch: when the named teammate has a pending approval, clearTeammatePendingApproval
+// must zero out the field so the reconciler stops gating that teammate.
+func TestClearTeammatePendingApproval_ClearsExistingEntry(t *testing.T) {
+	r := &AgentTeamReconciler{}
+	team := minimalTeam("clear-existing-test")
+	team.Status.Teammates = []claudev1alpha1.TeammateStatus{
+		{Name: "worker", PendingApproval: "spawn-worker"},
+		{Name: "reviewer", PendingApproval: "spawn-reviewer"},
+	}
+
+	r.clearTeammatePendingApproval(team, "worker")
+
+	require.Len(t, team.Status.Teammates, 2, "clear must not change slice length")
+	assert.Equal(t, "", team.Status.Teammates[0].PendingApproval,
+		"matched teammate's PendingApproval must be cleared")
+	assert.Equal(t, "spawn-reviewer", team.Status.Teammates[1].PendingApproval,
+		"unrelated teammate must not be touched")
+}
+
+// TestAgentImage_DefaultWhenUnset verifies agentImage() returns the baked-in
+// default when the reconciler field is empty, and the override when set.
+func TestAgentImage_DefaultWhenUnset(t *testing.T) {
+	r := &AgentTeamReconciler{}
+	assert.Equal(t, defaultAgentImage, r.agentImage(),
+		"agentImage must return defaultAgentImage when AgentImage is unset")
+
+	r.AgentImage = "custom/image:v1"
+	assert.Equal(t, "custom/image:v1", r.agentImage(),
+		"agentImage must return the override when AgentImage is set")
+}
+
+// TestInitImage_DefaultWhenUnset verifies initImage() returns the baked-in
+// default when the reconciler field is empty, and the override when set.
+func TestInitImage_DefaultWhenUnset(t *testing.T) {
+	r := &AgentTeamReconciler{}
+	assert.Equal(t, defaultInitImage, r.initImage(),
+		"initImage must return defaultInitImage when InitImage is unset")
+
+	r.InitImage = "custom/init:v1"
+	assert.Equal(t, "custom/init:v1", r.initImage(),
+		"initImage must return the override when InitImage is set")
+}
+
+// TestPVCAccessMode_DefaultWhenUnset verifies pvcAccessMode() returns
+// ReadWriteMany when the reconciler field is empty (the production default),
+// and the override when set (used by the Kind dev cluster to avoid NFS).
+func TestPVCAccessMode_DefaultWhenUnset(t *testing.T) {
+	r := &AgentTeamReconciler{}
+	assert.Equal(t, corev1.ReadWriteMany, r.pvcAccessMode(),
+		"pvcAccessMode must default to ReadWriteMany when PVCAccessMode is unset")
+
+	r.PVCAccessMode = corev1.ReadWriteOnce
+	assert.Equal(t, corev1.ReadWriteOnce, r.pvcAccessMode(),
+		"pvcAccessMode must return the override when PVCAccessMode is set")
+}
+
 // --- Pod/Volume introspection helpers ---
 
 func envMap(pod *corev1.Pod) map[string]string {
