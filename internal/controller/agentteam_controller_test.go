@@ -2,7 +2,11 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -1192,6 +1196,430 @@ func TestPVCAccessMode_DefaultWhenUnset(t *testing.T) {
 	r.PVCAccessMode = corev1.ReadWriteOnce
 	assert.Equal(t, corev1.ReadWriteOnce, r.pvcAccessMode(),
 		"pvcAccessMode must return the override when PVCAccessMode is set")
+}
+
+// --- MCP ConfigMap (issue #26) ---
+
+// decodeMCPConfig parses the JSON stored in the per-agent MCP ConfigMap and
+// returns the mcpServers map. Shared helper for the MCP test suite.
+func decodeMCPConfig(t *testing.T, cm *corev1.ConfigMap) map[string]map[string]string {
+	t.Helper()
+	raw, ok := cm.Data["mcp.json"]
+	require.True(t, ok, "ConfigMap must contain an mcp.json key")
+
+	var wrapped struct {
+		MCPServers map[string]map[string]string `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(raw), &wrapped),
+		"mcp.json must be valid JSON wrapped in {\"mcpServers\": {...}}")
+	return wrapped.MCPServers
+}
+
+// TestEnsureMCPConfigMap_CreatesConfigMapWithCorrectJSON exercises the happy
+// path of ensureMCPConfigMap: the ConfigMap does not yet exist, so it must be
+// created with the correct name, namespace, and {"mcpServers": {...}} JSON
+// structure. Servers are stored with type "sse" and the configured URL.
+func TestEnsureMCPConfigMap_CreatesConfigMapWithCorrectJSON(t *testing.T) {
+	team := minimalTeam("mcp-create")
+	r := newReconciler(team)
+	ctx := context.Background()
+
+	servers := []claudev1alpha1.MCPServerSpec{
+		{Name: "gmail", URL: "https://gmail.mcp.example.com/mcp"},
+	}
+	require.NoError(t, r.ensureMCPConfigMap(ctx, team, "worker", servers))
+
+	var cm corev1.ConfigMap
+	require.NoError(t, r.Get(ctx, types.NamespacedName{
+		Name:      "mcp-create-worker-mcp",
+		Namespace: "default",
+	}, &cm), "ensureMCPConfigMap must create a ConfigMap named {team}-{agent}-mcp")
+
+	// Owner reference points back at the AgentTeam so garbage collection works.
+	require.Len(t, cm.OwnerReferences, 1)
+	assert.Equal(t, team.Name, cm.OwnerReferences[0].Name)
+	assert.Equal(t, "AgentTeam", cm.OwnerReferences[0].Kind)
+
+	// JSON structure: {"mcpServers": {"gmail": {"type": "sse", "url": "..."}}}
+	mcpServers := decodeMCPConfig(t, &cm)
+	require.Contains(t, mcpServers, "gmail", "gmail server must be in the mcpServers map")
+	assert.Equal(t, "sse", mcpServers["gmail"]["type"],
+		"MCP server type must be \"sse\" — Claude Code currently only supports SSE transport here")
+	assert.Equal(t, "https://gmail.mcp.example.com/mcp", mcpServers["gmail"]["url"])
+}
+
+// TestEnsureMCPConfigMap_Idempotent verifies that calling ensureMCPConfigMap a
+// second time is a no-op (does not error, does not re-create). This matters
+// because reconcile runs repeatedly and the function must tolerate being
+// invoked after the ConfigMap is already present.
+func TestEnsureMCPConfigMap_Idempotent(t *testing.T) {
+	team := minimalTeam("mcp-idempotent")
+	r := newReconciler(team)
+	ctx := context.Background()
+
+	servers := []claudev1alpha1.MCPServerSpec{
+		{Name: "gmail", URL: "https://gmail.mcp.example.com/mcp"},
+	}
+	require.NoError(t, r.ensureMCPConfigMap(ctx, team, "worker", servers))
+
+	// Second call must not error even though the ConfigMap already exists.
+	require.NoError(t, r.ensureMCPConfigMap(ctx, team, "worker", servers),
+		"ensureMCPConfigMap must be idempotent so repeated reconciles don't fail")
+
+	// There must still be exactly one ConfigMap with that name.
+	var cmList corev1.ConfigMapList
+	require.NoError(t, r.List(ctx, &cmList, client.InNamespace("default")))
+	count := 0
+	for _, cm := range cmList.Items {
+		if cm.Name == "mcp-idempotent-worker-mcp" {
+			count++
+		}
+	}
+	assert.Equal(t, 1, count, "ensureMCPConfigMap must not duplicate the ConfigMap on a second call")
+}
+
+// TestEnsureMCPConfigMap_MultipleServers verifies that multi-server input
+// produces one entry per server in the generated JSON, each with the correct
+// URL. This pins the per-server loop behavior.
+func TestEnsureMCPConfigMap_MultipleServers(t *testing.T) {
+	team := minimalTeam("mcp-multi")
+	r := newReconciler(team)
+	ctx := context.Background()
+
+	servers := []claudev1alpha1.MCPServerSpec{
+		{Name: "gmail", URL: "https://gmail.mcp.example.com/mcp"},
+		{Name: "calendar", URL: "https://cal.mcp.example.com/mcp"},
+		{Name: "slack", URL: "https://slack.mcp.example.com/mcp"},
+	}
+	require.NoError(t, r.ensureMCPConfigMap(ctx, team, "worker", servers))
+
+	var cm corev1.ConfigMap
+	require.NoError(t, r.Get(ctx, types.NamespacedName{
+		Name:      "mcp-multi-worker-mcp",
+		Namespace: "default",
+	}, &cm))
+
+	mcpServers := decodeMCPConfig(t, &cm)
+	assert.Len(t, mcpServers, 3, "all three MCP servers must be present in the JSON")
+	assert.Equal(t, "https://gmail.mcp.example.com/mcp", mcpServers["gmail"]["url"])
+	assert.Equal(t, "https://cal.mcp.example.com/mcp", mcpServers["calendar"]["url"])
+	assert.Equal(t, "https://slack.mcp.example.com/mcp", mcpServers["slack"]["url"])
+	for name, entry := range mcpServers {
+		assert.Equal(t, "sse", entry["type"], "server %s must have type=sse", name)
+	}
+}
+
+// TestEnsureAgentPod_WithMCPServers_CreatesConfigMapBeforePod exercises the
+// integration between ensureAgentPod and ensureMCPConfigMap: when mcpServers
+// are supplied, the ConfigMap must be created alongside the pod so the pod's
+// "mcp-config" volume has a backing object at mount time.
+func TestEnsureAgentPod_WithMCPServers_CreatesConfigMapBeforePod(t *testing.T) {
+	team := minimalTeam("mcp-pod")
+	r := newReconciler(team)
+	ctx := context.Background()
+
+	servers := []claudev1alpha1.MCPServerSpec{
+		{Name: "gmail", URL: "https://gmail.mcp.example.com/mcp"},
+	}
+
+	require.NoError(t, r.ensureAgentPod(ctx, team, "worker", "sonnet", "do work",
+		"auto-accept", false, corev1.ResourceRequirements{}, nil, nil, servers))
+
+	// The ConfigMap must exist — otherwise the pod's mcp-config volume would
+	// fail to mount on a real cluster.
+	var cm corev1.ConfigMap
+	require.NoError(t, r.Get(ctx, types.NamespacedName{
+		Name:      "mcp-pod-worker-mcp",
+		Namespace: "default",
+	}, &cm), "ensureAgentPod must create the MCP ConfigMap when mcpServers are set")
+
+	// And the pod must reference it via the mcp-config volume.
+	var pod corev1.Pod
+	require.NoError(t, r.Get(ctx, types.NamespacedName{
+		Name:      "mcp-pod-worker",
+		Namespace: "default",
+	}, &pod))
+
+	var foundMCPVol bool
+	for _, v := range pod.Spec.Volumes {
+		if v.Name == "mcp-config" {
+			require.NotNil(t, v.ConfigMap, "mcp-config volume must be ConfigMap-backed")
+			assert.Equal(t, "mcp-pod-worker-mcp", v.ConfigMap.Name,
+				"mcp-config volume must reference the per-agent MCP ConfigMap")
+			foundMCPVol = true
+			break
+		}
+	}
+	assert.True(t, foundMCPVol, "pod must have an mcp-config volume when MCP servers are configured")
+}
+
+// TestEnsureAgentPod_Idempotent verifies the early-return branch when the pod
+// already exists. ensureAgentPod is called on every reconcile loop, so it must
+// short-circuit when the pod is present rather than erroring on AlreadyExists.
+func TestEnsureAgentPod_Idempotent(t *testing.T) {
+	team := minimalTeam("idem-pod")
+	r := newReconciler(team)
+	ctx := context.Background()
+
+	require.NoError(t, r.ensureAgentPod(ctx, team, "worker", "sonnet", "do work",
+		"auto-accept", false, corev1.ResourceRequirements{}, nil, nil, nil))
+
+	// Second call must be a no-op — no error, pod still present.
+	require.NoError(t, r.ensureAgentPod(ctx, team, "worker", "sonnet", "do work",
+		"auto-accept", false, corev1.ResourceRequirements{}, nil, nil, nil),
+		"ensureAgentPod must be idempotent so repeated reconciles don't fail")
+
+	var pod corev1.Pod
+	require.NoError(t, r.Get(ctx, types.NamespacedName{
+		Name:      "idem-pod-worker",
+		Namespace: "default",
+	}, &pod))
+}
+
+// TestEnsureAgentPod_NoMCPServers_SkipsConfigMap verifies the negative path:
+// without mcpServers the ConfigMap guard in ensureAgentPod must not run, and
+// no MCP ConfigMap should be created.
+func TestEnsureAgentPod_NoMCPServers_SkipsConfigMap(t *testing.T) {
+	team := minimalTeam("mcp-none")
+	r := newReconciler(team)
+	ctx := context.Background()
+
+	require.NoError(t, r.ensureAgentPod(ctx, team, "worker", "sonnet", "do work",
+		"auto-accept", false, corev1.ResourceRequirements{}, nil, nil, nil))
+
+	var cm corev1.ConfigMap
+	err := r.Get(ctx, types.NamespacedName{
+		Name:      "mcp-none-worker-mcp",
+		Namespace: "default",
+	}, &cm)
+	assert.True(t, errors.IsNotFound(err),
+		"no MCP ConfigMap should be created when mcpServers is empty")
+}
+
+// --- executeOnComplete and sendWebhookEvent (issue #27) ---
+
+// TestExecuteOnComplete_NotifyWithWebhook_PostsPayload exercises the happy path
+// of the "notify" branch: when Lifecycle.OnComplete is "notify" and a webhook
+// is configured, executeOnComplete must POST a JSON payload to the webhook URL
+// containing the team name, namespace, phase, and event="completed".
+func TestExecuteOnComplete_NotifyWithWebhook_PostsPayload(t *testing.T) {
+	var capturedBody []byte
+	var capturedMethod string
+	var capturedContentType string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedMethod = r.Method
+		capturedContentType = r.Header.Get("Content-Type")
+		body, _ := io.ReadAll(r.Body)
+		capturedBody = body
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	team := minimalTeam("notify-team")
+	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{OnComplete: "notify"}
+	team.Spec.Observability = &claudev1alpha1.ObservabilitySpec{
+		Webhook: &claudev1alpha1.WebhookSpec{
+			URL:    server.URL,
+			Events: []string{"completed"},
+		},
+	}
+	team.Status.Phase = "Running" // phase at the time of the webhook fire
+
+	r := newReconciler(team)
+	require.NoError(t, r.executeOnComplete(context.Background(), team))
+
+	// Verify the webhook was actually called.
+	assert.Equal(t, http.MethodPost, capturedMethod, "executeOnComplete must POST")
+	assert.Equal(t, "application/json", capturedContentType,
+		"webhook payload must be JSON")
+
+	var payload map[string]string
+	require.NoError(t, json.Unmarshal(capturedBody, &payload))
+	assert.Equal(t, "completed", payload["event"], "event must be \"completed\" for OnComplete notify")
+	assert.Equal(t, "notify-team", payload["team"])
+	assert.Equal(t, "default", payload["namespace"])
+	assert.Equal(t, "Running", payload["phase"], "phase reflects team state at webhook time")
+}
+
+// TestExecuteOnComplete_NotifyWithoutWebhook_NoOp covers the "notify" branch
+// when no Webhook is configured: the function must short-circuit to nil
+// without erroring rather than dereferencing a nil Webhook.
+func TestExecuteOnComplete_NotifyWithoutWebhook_NoOp(t *testing.T) {
+	team := minimalTeam("notify-no-webhook")
+	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{OnComplete: "notify"}
+	// Observability set, but Webhook nil.
+	team.Spec.Observability = &claudev1alpha1.ObservabilitySpec{LogLevel: "info"}
+
+	r := newReconciler(team)
+	require.NoError(t, r.executeOnComplete(context.Background(), team),
+		"OnComplete=notify with no webhook must be a silent no-op, not an error")
+}
+
+// TestExecuteOnComplete_NotifyWithoutObservability_NoOp covers the case where
+// Observability itself is nil — exercises the outer guard on the notify branch.
+func TestExecuteOnComplete_NotifyWithoutObservability_NoOp(t *testing.T) {
+	team := minimalTeam("notify-no-obs")
+	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{OnComplete: "notify"}
+	// Observability nil entirely.
+
+	r := newReconciler(team)
+	require.NoError(t, r.executeOnComplete(context.Background(), team),
+		"OnComplete=notify with no Observability must be a silent no-op")
+}
+
+// TestExecuteOnComplete_CreatePR_StubReturnsNil covers the "create-pr" log-only
+// stub. Until #4/#7 land the real implementation, this branch must just log
+// and return nil so the team still finishes cleanly.
+func TestExecuteOnComplete_CreatePR_StubReturnsNil(t *testing.T) {
+	team := minimalTeam("create-pr-team")
+	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{OnComplete: "create-pr"}
+
+	r := newReconciler(team)
+	assert.NoError(t, r.executeOnComplete(context.Background(), team),
+		"create-pr stub must return nil so completion isn't blocked")
+}
+
+// TestExecuteOnComplete_PushBranch_StubReturnsNil covers the "push-branch"
+// log-only stub for the same reason as create-pr.
+func TestExecuteOnComplete_PushBranch_StubReturnsNil(t *testing.T) {
+	team := minimalTeam("push-branch-team")
+	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{OnComplete: "push-branch"}
+
+	r := newReconciler(team)
+	assert.NoError(t, r.executeOnComplete(context.Background(), team),
+		"push-branch stub must return nil so completion isn't blocked")
+}
+
+// TestSendWebhookEvent_HappyPath verifies that sendWebhookEvent POSTs the
+// expected JSON shape and returns nil when the server responds 2xx.
+func TestSendWebhookEvent_HappyPath(t *testing.T) {
+	var capturedBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		capturedBody = body
+		w.WriteHeader(http.StatusAccepted) // 202 — also a 2xx
+	}))
+	defer server.Close()
+
+	team := minimalTeam("webhook-happy")
+	team.Status.Phase = "Initializing"
+	r := newReconciler(team)
+
+	require.NoError(t, r.sendWebhookEvent(context.Background(), server.URL, "spawn-worker", team))
+
+	var payload map[string]string
+	require.NoError(t, json.Unmarshal(capturedBody, &payload))
+	assert.Equal(t, "spawn-worker", payload["event"])
+	assert.Equal(t, "webhook-happy", payload["team"])
+	assert.Equal(t, "default", payload["namespace"])
+	assert.Equal(t, "Initializing", payload["phase"])
+}
+
+// TestSendWebhookEvent_Non2xxReturnsError verifies that a 4xx/5xx response
+// from the webhook is reported as an error so callers can log/surface it.
+func TestSendWebhookEvent_Non2xxReturnsError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	team := minimalTeam("webhook-500")
+	r := newReconciler(team)
+
+	err := r.sendWebhookEvent(context.Background(), server.URL, "completed", team)
+	require.Error(t, err, "non-2xx webhook responses must return an error")
+	assert.Contains(t, err.Error(), "500", "error message should include the HTTP status code")
+}
+
+// TestSendWebhookEvent_BadURLReturnsError covers the http.NewRequestWithContext
+// error path: an unparseable URL must surface as an error rather than panicking.
+func TestSendWebhookEvent_BadURLReturnsError(t *testing.T) {
+	team := minimalTeam("webhook-badurl")
+	r := newReconciler(team)
+
+	err := r.sendWebhookEvent(context.Background(), "http://\x7f-bad-host/", "completed", team)
+	require.Error(t, err, "an invalid webhook URL must return an error, not panic")
+}
+
+// TestReconcileRunning_OnNotifyCompletion_FiresWebhookAndCompletes is the
+// integration test for the issue: when reconcileRunning detects all pods done
+// and OnComplete is "notify", it must (1) fire the webhook and (2) still set
+// Phase=Completed. This pins the contract between the reconciler and the
+// post-completion hook.
+func TestReconcileRunning_OnNotifyCompletion_FiresWebhookAndCompletes(t *testing.T) {
+	var webhookCalled bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		webhookCalled = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	team := minimalTeam("notify-complete")
+	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{OnComplete: "notify"}
+	team.Spec.Observability = &claudev1alpha1.ObservabilitySpec{
+		Webhook: &claudev1alpha1.WebhookSpec{
+			URL:    server.URL,
+			Events: []string{"completed"},
+		},
+	}
+	startTime := metav1.NewTime(time.Now().Add(-1 * time.Minute))
+	team.Status.StartedAt = &startTime
+	team.Status.Phase = "Running"
+
+	leadPod := succeededPod("notify-complete-lead", "default", "notify-complete")
+	workerPod := succeededPod("notify-complete-worker", "default", "notify-complete")
+
+	r := newReconciler(team, leadPod, workerPod)
+	team = fetch(t, r, "notify-complete")
+	team.Status.Phase = "Running"
+	team.Status.StartedAt = &startTime
+	ctx := context.Background()
+
+	_, err := r.reconcileRunning(ctx, team)
+	require.NoError(t, err)
+	assert.True(t, webhookCalled, "reconcileRunning must invoke the notify webhook on completion")
+
+	fetched := fetch(t, r, "notify-complete")
+	assert.Equal(t, "Completed", fetched.Status.Phase,
+		"team must reach Completed even though the webhook side-effect was performed")
+}
+
+// TestReconcileRunning_WebhookFailureDoesNotBlockCompletion verifies the
+// "post-completion actions are non-fatal" contract: if the webhook returns 500,
+// the reconciler must still mark the team Completed and not bubble the error.
+func TestReconcileRunning_WebhookFailureDoesNotBlockCompletion(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	team := minimalTeam("notify-fail")
+	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{OnComplete: "notify"}
+	team.Spec.Observability = &claudev1alpha1.ObservabilitySpec{
+		Webhook: &claudev1alpha1.WebhookSpec{
+			URL:    server.URL,
+			Events: []string{"completed"},
+		},
+	}
+	startTime := metav1.NewTime(time.Now().Add(-1 * time.Minute))
+	team.Status.StartedAt = &startTime
+	team.Status.Phase = "Running"
+
+	leadPod := succeededPod("notify-fail-lead", "default", "notify-fail")
+	workerPod := succeededPod("notify-fail-worker", "default", "notify-fail")
+
+	r := newReconciler(team, leadPod, workerPod)
+	team = fetch(t, r, "notify-fail")
+	team.Status.Phase = "Running"
+	team.Status.StartedAt = &startTime
+	ctx := context.Background()
+
+	_, err := r.reconcileRunning(ctx, team)
+	require.NoError(t, err, "reconcileRunning must swallow webhook errors")
+
+	fetched := fetch(t, r, "notify-fail")
+	assert.Equal(t, "Completed", fetched.Status.Phase,
+		"webhook failure must NOT block transition to Completed")
 }
 
 // --- Pod/Volume introspection helpers ---
