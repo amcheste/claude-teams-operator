@@ -161,6 +161,51 @@ func advanceThroughInit(name, namespace string) {
 	completeJob(name+"-init", namespace)
 }
 
+// backdateStartedAt patches the team's status.startedAt to the given duration in the past
+// so that timeout/budget checks see the team as having run long enough to trip them.
+// Uses a status subresource Patch so it can't be clobbered by an in-flight reconcile.
+func backdateStartedAt(name, namespace string, ago time.Duration) {
+	GinkgoHelper()
+	Eventually(func(g Gomega) {
+		var t claudev1alpha1.AgentTeam
+		g.Expect(k8sClient.Get(ctx, nn(name, namespace), &t)).To(Succeed())
+		patch := client.MergeFrom(t.DeepCopy())
+		past := metav1.NewTime(time.Now().Add(-ago))
+		t.Status.StartedAt = &past
+		g.Expect(k8sClient.Status().Patch(ctx, &t, patch)).To(Succeed())
+	}).Should(Succeed())
+}
+
+// pokeTeam bumps an annotation on the team to trigger an immediate reconcile instead of
+// waiting for the next RequeueAfter interval.
+func pokeTeam(name, namespace string) {
+	GinkgoHelper()
+	Eventually(func(g Gomega) {
+		var t claudev1alpha1.AgentTeam
+		g.Expect(k8sClient.Get(ctx, nn(name, namespace), &t)).To(Succeed())
+		if t.Annotations == nil {
+			t.Annotations = map[string]string{}
+		}
+		t.Annotations["test.claude.amcheste.io/poke"] = time.Now().Format(time.RFC3339Nano)
+		g.Expect(k8sClient.Update(ctx, &t)).To(Succeed())
+	}).Should(Succeed())
+}
+
+// expectPodGone polls until the pod is either deleted or has a DeletionTimestamp set.
+// envtest has no kubelet to finalize graceful pod deletion, so terminating pods may linger.
+func expectPodGone(name, namespace string) {
+	GinkgoHelper()
+	Eventually(func(g Gomega) {
+		var pod corev1.Pod
+		err := k8sClient.Get(ctx, nn(name, namespace), &pod)
+		if errors.IsNotFound(err) {
+			return
+		}
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(pod.DeletionTimestamp).NotTo(BeNil(), "pod %s should be deleted or terminating", name)
+	}).Should(Succeed())
+}
+
 // --- Integration Tests ---
 
 var _ = Describe("AgentTeam controller", func() {
@@ -241,6 +286,27 @@ var _ = Describe("AgentTeam controller", func() {
 
 			Expect(k8sClient.Get(ctx, nn(team.Name+"-init", namespace),
 				&batchv1.Job{})).To(MatchError(errors.IsNotFound, "IsNotFound"))
+		})
+
+		It("deploys lead and teammate pods with no repo volume or WORKTREE_PATH", func() {
+			waitForPhase(team.Name, namespace, "Running")
+			waitForPod(team.Name+"-lead", namespace)
+			waitForPod(team.Name+"-writer", namespace)
+
+			// Verify no repo volume is mounted on either pod.
+			for _, podName := range []string{team.Name + "-lead", team.Name + "-writer"} {
+				var pod corev1.Pod
+				Expect(k8sClient.Get(ctx, nn(podName, namespace), &pod)).To(Succeed())
+
+				volumeNames := []string{}
+				for _, v := range pod.Spec.Volumes {
+					volumeNames = append(volumeNames, v.Name)
+				}
+				Expect(volumeNames).NotTo(ContainElement("repo"), "cowork pod %s should not have a repo volume", podName)
+
+				env := envMap(pod)
+				Expect(env).NotTo(HaveKey("WORKTREE_PATH"), "cowork pod %s should not have WORKTREE_PATH", podName)
+			}
 		})
 	})
 
@@ -359,6 +425,34 @@ var _ = Describe("AgentTeam controller", func() {
 				g.Expect(t.Status.Lead).NotTo(BeNil())
 				g.Expect(t.Status.Lead.Phase).To(Equal("Completed"))
 			}).Should(Succeed())
+		})
+
+		It("deletes all team pods during terminal phase and sets a stable completedAt", func() {
+			succeedPod(team.Name+"-lead", namespace)
+			succeedPod(team.Name+"-worker", namespace)
+			waitForPhase(team.Name, namespace, "Completed")
+
+			// Verify reconcileTerminal deletes the pods.
+			expectPodGone(team.Name+"-lead", namespace)
+			expectPodGone(team.Name+"-worker", namespace)
+
+			// Verify completedAt is set and stable across reconciles.
+			var first metav1.Time
+			Eventually(func(g Gomega) {
+				var t claudev1alpha1.AgentTeam
+				g.Expect(k8sClient.Get(ctx, nn(team.Name, namespace), &t)).To(Succeed())
+				g.Expect(t.Status.CompletedAt).NotTo(BeNil())
+				first = *t.Status.CompletedAt
+			}).Should(Succeed())
+
+			// Poke to trigger another reconcile and confirm completedAt does not change.
+			pokeTeam(team.Name, namespace)
+			Consistently(func(g Gomega) {
+				var t claudev1alpha1.AgentTeam
+				g.Expect(k8sClient.Get(ctx, nn(team.Name, namespace), &t)).To(Succeed())
+				g.Expect(t.Status.CompletedAt).NotTo(BeNil())
+				g.Expect(t.Status.CompletedAt.Time).To(Equal(first.Time), "completedAt should be stable across reconciles")
+			}).WithTimeout(3 * time.Second).Should(Succeed())
 		})
 	})
 
@@ -501,6 +595,79 @@ var _ = Describe("AgentTeam controller", func() {
 			}
 			err := k8sClient.Create(ctx, team)
 			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	Describe("Lifecycle enforcement", func() {
+		It("transitions to TimedOut and removes pods when Running phase exceeds the configured timeout", func() {
+			namespace := testNS()
+			team := codingTeam("ct-timeout-run", namespace)
+			// Use a long timeout so the team can advance through init without tripping it.
+			team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{Timeout: "24h"}
+			Expect(k8sClient.Create(ctx, team)).To(Succeed())
+
+			advanceThroughInit(team.Name, namespace)
+			waitForPhase(team.Name, namespace, "Running")
+			waitForPod(team.Name+"-lead", namespace)
+			waitForPod(team.Name+"-worker", namespace)
+
+			// Now backdate StartedAt past the 24h timeout to trigger TimedOut on next reconcile.
+			backdateStartedAt(team.Name, namespace, 25*time.Hour)
+			pokeTeam(team.Name, namespace)
+
+			waitForPhase(team.Name, namespace, "TimedOut")
+			expectPodGone(team.Name+"-lead", namespace)
+			expectPodGone(team.Name+"-worker", namespace)
+		})
+
+		It("transitions to BudgetExceeded and removes pods when the estimated cost exceeds the limit", func() {
+			namespace := testNS()
+			team := codingTeam("ct-budget", namespace)
+			limit := "0.01"
+			team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{
+				Timeout:     "24h", // long enough that the timeout does not fire first
+				BudgetLimit: &limit,
+			}
+			Expect(k8sClient.Create(ctx, team)).To(Succeed())
+
+			advanceThroughInit(team.Name, namespace)
+			waitForPhase(team.Name, namespace, "Running")
+			waitForPod(team.Name+"-lead", namespace)
+			waitForPod(team.Name+"-worker", namespace)
+
+			// Backdate StartedAt far enough for estimateCost() to exceed the tiny budget,
+			// but well within the 24h timeout.
+			backdateStartedAt(team.Name, namespace, 1*time.Hour)
+			pokeTeam(team.Name, namespace)
+
+			waitForPhase(team.Name, namespace, "BudgetExceeded")
+			expectPodGone(team.Name+"-lead", namespace)
+			expectPodGone(team.Name+"-worker", namespace)
+		})
+
+		It("transitions to TimedOut during Initializing without waiting for the init Job to fail", func() {
+			namespace := testNS()
+			team := codingTeam("ct-timeout-init", namespace)
+			// Use a long timeout so the team can reach Initializing first.
+			team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{Timeout: "24h"}
+			Expect(k8sClient.Create(ctx, team)).To(Succeed())
+
+			// Reach Initializing with the init Job still running (never completed/failed).
+			waitForPhase(team.Name, namespace, "Initializing")
+			waitForJob(team.Name+"-init", namespace)
+
+			// Now backdate past the 24h timeout while the Job is still running.
+			backdateStartedAt(team.Name, namespace, 25*time.Hour)
+			pokeTeam(team.Name, namespace)
+
+			waitForPhase(team.Name, namespace, "TimedOut")
+
+			// The init Job should still exist and still be running — we proved the timeout
+			// check short-circuits the init wait rather than requiring failJob/completeJob.
+			var job batchv1.Job
+			Expect(k8sClient.Get(ctx, nn(team.Name+"-init", namespace), &job)).To(Succeed())
+			Expect(job.Status.Succeeded).To(BeZero())
+			Expect(job.Status.Failed).To(BeZero())
 		})
 	})
 })
