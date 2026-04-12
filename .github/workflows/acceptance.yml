@@ -49,6 +49,21 @@ jobs:
       - name: Generate manifests
         run: make manifests
 
+      # Kind uses local-path-provisioner with a 'standard' StorageClass.
+      # The operator defaults team-state and repo PVCs to StorageClass 'nfs',
+      # so create an alias backed by the same provisioner.
+      - name: Create nfs StorageClass alias for Kind
+        run: |
+          kubectl apply -f - <<'YAML'
+          apiVersion: storage.k8s.io/v1
+          kind: StorageClass
+          metadata:
+            name: nfs
+          provisioner: rancher.io/local-path
+          reclaimPolicy: Delete
+          volumeBindingMode: WaitForFirstConsumer
+          YAML
+
       - name: Install CRDs
         run: kubectl apply -f config/crd/bases/
 
