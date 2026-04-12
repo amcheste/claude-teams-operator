@@ -1,0 +1,28 @@
+FROM node:25-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    openssh-client \
+    curl \
+    jq \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Claude Code CLI
+RUN npm install -g @anthropic-ai/claude-code
+
+# Create claude user and directory structure
+RUN useradd -m -s /bin/bash claude \
+    && mkdir -p /home/claude/.claude/teams \
+    && mkdir -p /home/claude/.claude/tasks \
+    && mkdir -p /workspace \
+    && chown -R claude:claude /home/claude /workspace
+
+# Copy entrypoint script
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+USER claude
+WORKDIR /workspace
+
+ENTRYPOINT ["/entrypoint.sh"]

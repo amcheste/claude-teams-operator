@@ -1,0 +1,132 @@
+apiVersion: claude.amcheste.io/v1alpha1
+kind: AgentTeam
+metadata:
+  name: auth-refactor
+  namespace: dev-agents
+spec:
+  repository:
+    url: "git@github.com:acme/backend.git"
+    branch: "main"
+    worktreeStrategy: "per-teammate"
+    credentialsSecret: "git-credentials"
+
+  auth:
+    apiKeySecret: "anthropic-api-key"
+
+  lead:
+    model: "opus"
+    prompt: |
+      You are the team lead for refactoring the auth module from JWT to OAuth2.
+
+      Break the work into these parallel tracks:
+      1. Backend API endpoints (backend-api teammate)
+      2. Frontend auth components (frontend-auth teammate)
+      3. Integration + unit tests (test-coverage teammate)
+
+      Coordinate teammates. Ensure consistent interfaces between tracks.
+      When all tracks are done, validate the integration and synthesize a summary.
+    permissionMode: "auto-accept"
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+      limits:
+        cpu: "1"
+        memory: "2Gi"
+
+  teammates:
+    - name: "backend-api"
+      model: "sonnet"
+      prompt: |
+        You are the backend API specialist. Implement OAuth2 endpoints:
+        - POST /api/auth/authorize
+        - POST /api/auth/token
+        - POST /api/auth/revoke
+        - GET /api/auth/userinfo
+
+        Update route handlers and middleware. Remove JWT-specific code.
+        Message the test-coverage teammate when your interfaces are stable.
+      scope:
+        includePaths:
+          - "src/api/auth/"
+          - "src/middleware/"
+          - "src/models/user.ts"
+        excludePaths:
+          - "src/frontend/"
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+
+    - name: "frontend-auth"
+      model: "sonnet"
+      prompt: |
+        You are the frontend auth specialist. Update auth components:
+        - LoginForm → use OAuth2 authorization code flow
+        - useAuth hook → replace JWT decode with token introspection
+        - AuthProvider → manage OAuth2 tokens with PKCE
+
+        Coordinate with backend-api on endpoint interfaces.
+      scope:
+        includePaths:
+          - "src/components/auth/"
+          - "src/hooks/useAuth.ts"
+          - "src/providers/AuthProvider.tsx"
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+
+    - name: "test-coverage"
+      model: "sonnet"
+      prompt: |
+        You are the test specialist. Write comprehensive tests for the OAuth2 migration:
+        - Unit tests for each new endpoint
+        - Integration tests for the full auth flow
+        - Frontend component tests with mocked auth
+        - Edge cases: token expiry, refresh flow, revocation
+
+        Wait for backend-api to stabilize interfaces before writing integration tests.
+      scope:
+        includePaths:
+          - "tests/"
+      dependsOn:
+        - "backend-api"
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+
+  coordination:
+    mailboxBackend: "shared-volume"
+    taskBackend: "shared-volume"
+
+  lifecycle:
+    timeout: "2h"
+    budgetLimit: "30.00"
+    onComplete: "create-pr"
+    pullRequest:
+      targetBranch: "main"
+      titleTemplate: "feat(auth): migrate from JWT to OAuth2"
+      reviewers:
+        - "alan-cam"
+      labels:
+        - "agent-generated"
+        - "auth"
+        - "needs-review"
+
+  qualityGates:
+    requireTests: true
+    requireLint: true
+    validationScript: |
+      #!/bin/bash
+      set -e
+      npm run test -- --passWithNoTests
+      npm run lint
+      npm run typecheck
+
+  observability:
+    metrics:
+      enabled: true
+      port: 9090
+    logLevel: "info"

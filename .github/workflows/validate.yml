@@ -11,16 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  # ── Job 0: Detect changed files (PR only) ─────────────────────────────────
-  # Use this to skip expensive jobs (macOS runners, paid APIs, long test suites)
-  # when a PR only touches CI/workflow files.
-  #
-  # Usage: add `needs: [detect-changes]` and
-  #   `if: needs.detect-changes.outputs.source_changed == 'true'`
-  # to any job you want to skip on CI-only PRs.
-  #
-  # Adjust the grep pattern to match YOUR project's source paths. The default
-  # skips macOS/expensive jobs when every changed file is under .github/.
+  # ── Detect changed files (PR only) ────────────────────────────────────────
   detect-changes:
     name: Detect Changed Files
     runs-on: ubuntu-latest
@@ -34,7 +25,7 @@ jobs:
       - name: Check for source file changes
         id: filter
         run: |
-          # On non-PR events (push to main/develop, workflow_call, tags) always run.
+          # On non-PR events (push to main/develop, workflow_call) always run.
           if [[ "${{ github.event_name }}" != "pull_request" ]]; then
             echo "source=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -45,28 +36,88 @@ jobs:
             && echo "source=true" >> "$GITHUB_OUTPUT" \
             || echo "source=false" >> "$GITHUB_OUTPUT"
 
-  # ── Lint ───────────────────────────────────────────────────────────────────
-  # Customise this job for your project's language/toolchain.
-  # Examples:
-  #   Shell:      shellcheck **/*.sh
-  #   Go:         go vet ./... && golangci-lint run
-  #   Python:     ruff check . && mypy .
-  #   Node:       npm run lint
+  # ── Lint ──────────────────────────────────────────────────────────────────
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.source_changed == 'true'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
-      - name: Lint
-        run: |
-          echo "TODO: add lint steps for this project"
+      - uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5
+        with:
+          go-version-file: go.mod
+          cache: true
 
-  # ── Commit Lint (PRs only) ──────────────────────────────────────────────────
+      - name: go vet
+        run: go vet ./...
+
+      # golangci-lint is temporarily disabled: the golangci-lint cache service
+      # is returning 400 on every restore, forcing full package loading from
+      # scratch each run. k8s.io v0.35's type graph exceeds 16 GiB without a
+      # warm cache, OOM-killing the runner at ~30 min regardless of linter
+      # selection. go vet (above) covers the critical correctness subset.
+      # Re-enable once the cache service is healthy or the runner is upgraded.
+
+      - name: Check manifests are up to date
+        run: |
+          make manifests generate
+          git diff --exit-code || (echo "CRD manifests or generated code is out of date. Run 'make manifests generate' and commit the result." && exit 1)
+
+      - name: Helm lint
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          helm lint ./charts/claude-teams-operator
+
+  # ── Unit & Integration Tests ───────────────────────────────────────────────
+  test:
+    name: Unit & Integration Tests
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.source_changed == 'true'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Unit tests
+        run: make test
+
+      - name: Install setup-envtest
+        run: make envtest
+
+      - name: Integration tests
+        run: make test-integration
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: coverage-report
+          path: cover.out
+          retention-days: 7
+
+  # ── Build operator image ───────────────────────────────────────────────────
+  build:
+    name: Build Operator Image
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.source_changed == 'true'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Build operator Docker image
+        run: docker build -f docker/Dockerfile.operator -t claude-teams-operator:ci .
+
+  # ── Commit Lint (PRs only) ────────────────────────────────────────────────
   commit-lint:
     name: Commit Lint
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.base_ref != 'main'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:

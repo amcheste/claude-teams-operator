@@ -1,0 +1,69 @@
+# Default values for claude-teams-operator
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/amcheste/claude-teams-operator
+  tag: latest
+  pullPolicy: IfNotPresent
+
+claudeCodeImage:
+  repository: ghcr.io/amcheste/claude-code-runner
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# Service account for the operator
+serviceAccount:
+  create: true
+  name: claude-teams-operator
+
+# Operator pod resources
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# Default storage class for team PVCs
+# Must support ReadWriteMany (NFS, EFS, etc.)
+storage:
+  storageClassName: "nfs"
+  teamStateSize: "5Gi"
+  repoSize: "20Gi"
+
+# Metrics
+metrics:
+  enabled: true
+  port: 8080
+  serviceMonitor:
+    enabled: false
+    namespace: ""
+    interval: 30s
+
+# Health probes
+healthProbe:
+  port: 8081
+
+# Leader election (enable for HA)
+leaderElection:
+  enabled: false
+
+# Default budget limit for teams without one specified (USD)
+defaultBudgetLimit: 50.00
+
+# Default timeout for teams without one specified
+defaultTimeout: "4h"
+
+# Log level
+logLevel: info
+
+# Node selector for operator pod
+nodeSelector: {}
+
+# Tolerations for operator pod
+tolerations: []
+
+# Affinity for operator pod
+affinity: {}

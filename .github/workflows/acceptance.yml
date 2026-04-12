@@ -1,0 +1,126 @@
+name: Acceptance Tests
+
+# Runs on PRs from develop → main (the release gate) and on demand.
+# Purpose: spin up a real Kind cluster, deploy the operator, and exercise the
+# full AgentTeam lifecycle before any code lands on main.
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    name: Acceptance (Kind)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # ── Kind ──────────────────────────────────────────────────────────────
+      - name: Install Kind
+        run: go install sigs.k8s.io/kind@latest
+
+      - name: Create Kind cluster
+        run: kind create cluster --name claude-teams --wait 120s
+
+      # ── Build & load operator image ────────────────────────────────────────
+      - name: Build operator image
+        run: docker build -t ghcr.io/amcheste/claude-teams-operator:acceptance -f docker/Dockerfile.operator .
+
+      - name: Load operator image into Kind
+        run: kind load docker-image ghcr.io/amcheste/claude-teams-operator:acceptance --name claude-teams
+
+      # Pull busybox so it's available in Kind nodes before tests start
+      - name: Pre-pull busybox into Kind
+        run: |
+          docker pull busybox:latest
+          kind load docker-image busybox:latest --name claude-teams
+
+      # ── Install CRDs + RBAC ────────────────────────────────────────────────
+      - name: Generate manifests
+        run: make manifests
+
+      # Kind uses local-path-provisioner with a 'standard' StorageClass.
+      # The operator defaults team-state and repo PVCs to StorageClass 'nfs',
+      # so create an alias backed by the same provisioner.
+      - name: Create nfs StorageClass alias for Kind
+        run: |
+          kubectl apply -f - <<'YAML'
+          apiVersion: storage.k8s.io/v1
+          kind: StorageClass
+          metadata:
+            name: nfs
+          provisioner: rancher.io/local-path
+          reclaimPolicy: Delete
+          volumeBindingMode: WaitForFirstConsumer
+          YAML
+
+      - name: Install CRDs
+        run: kubectl apply -f config/crd/bases/
+
+      - name: Deploy RBAC
+        run: kubectl apply -f config/rbac/
+
+      # ── Deploy operator in acceptance mode ─────────────────────────────────
+      - name: Create operator namespace
+        run: kubectl apply -f config/manager/namespace.yaml
+
+      - name: Deploy operator
+        run: kubectl apply -f config/manager/manager.yaml
+
+      - name: Set acceptance image and flags
+        run: |
+          kubectl set image deployment/controller-manager \
+            manager=ghcr.io/amcheste/claude-teams-operator:acceptance \
+            -n claude-teams-system
+
+          kubectl patch deployment controller-manager \
+            -n claude-teams-system \
+            --type=json \
+            -p='[
+              {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--agent-image=busybox:latest"},
+              {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--init-image=busybox:latest"},
+              {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--skip-init-script"},
+              {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--pvc-access-mode=ReadWriteOnce"},
+              {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--agent-command=sh,-c,sleep 20 && exit 0"}
+            ]'
+
+      - name: Wait for operator to be ready
+        run: |
+          kubectl rollout status deployment/controller-manager \
+            -n claude-teams-system \
+            --timeout=120s
+
+      # ── Run acceptance tests ───────────────────────────────────────────────
+      - name: Run acceptance tests
+        run: make test-acceptance
+
+      # ── Debug on failure ───────────────────────────────────────────────────
+      - name: Collect operator logs on failure
+        if: failure()
+        run: |
+          echo "=== Operator logs ==="
+          kubectl logs -n claude-teams-system \
+            deployment/controller-manager --tail=200 || true
+
+          echo "=== AgentTeams ==="
+          kubectl get agentteams -A -o wide || true
+
+          echo "=== Pods in test namespaces ==="
+          kubectl get pods -A --selector='claude.amcheste.io/team' || true
+
+          echo "=== Recent events ==="
+          kubectl get events -A --sort-by='.lastTimestamp' | tail -40 || true
+
+      - name: Delete Kind cluster
+        if: always()
+        run: kind delete cluster --name claude-teams
