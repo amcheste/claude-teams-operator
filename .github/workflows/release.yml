@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@b5730b8d7a98e21be1b5bbc65e7a55de0c0dab15 # v3
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3
@@ -38,7 +38,7 @@ jobs:
 
       - name: Extract Docker metadata (operator)
         id: meta-operator
-        uses: docker/metadata-action@902fa8ec7d6ecbea8a986b4f25c2ab45c2b4b9ee # v5
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6
         with:
           images: ghcr.io/amcheste/claude-teams-operator
           tags: |
@@ -49,7 +49,7 @@ jobs:
 
       - name: Build and push operator image
         id: build-operator
-        uses: docker/build-push-action@471d1dc4e07e5cdedd4c2b89e8ea7ad1a7af5a2d # v6
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
         with:
           context: .
           file: docker/Dockerfile.operator
