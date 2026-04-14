@@ -132,24 +132,23 @@ jobs:
           git commit -m "chore: release v${NEW_VERSION}"
           git push origin "$BRANCH"
 
+          BODY="## Monthly dependency patch — v${NEW_VERSION}
+
+          This PR was opened automatically. It bumps the patch version to capture
+          **${DEP_COUNT} Dependabot update(s)** merged to \`develop\` since the last release.
+
+          ## What to do
+          1. Review the dependency commits included in this release
+          2. Merge this PR into \`develop\`
+          3. Open the \`develop\`→\`main\` release PR as normal (or use \`/publish-release\`)
+          4. Push the tag to trigger the release pipeline
+
+          > **Note:** CI will not auto-run on this PR due to GitHub token restrictions.
+          > All dependency changes were individually validated by CI when Dependabot
+          > merged them to \`develop\`. Trigger CI manually if you want an extra check."
+
           gh pr create \
             --base develop \
             --head "$BRANCH" \
             --title "chore: release v${NEW_VERSION} (monthly dependency patch)" \
-            --body "$(cat <<EOF
-## Monthly dependency patch — v${NEW_VERSION}
-
-This PR was opened automatically. It bumps the patch version to capture
-**${DEP_COUNT} Dependabot update(s)** merged to \`develop\` since the last release.
-
-## What to do
-1. Review the dependency commits included in this release
-2. Merge this PR into \`develop\`
-3. Open the \`develop\`→\`main\` release PR as normal (or use \`/publish-release\`)
-4. Push the tag to trigger the release pipeline
-
-> **Note:** CI will not auto-run on this PR due to GitHub token restrictions.
-> All dependency changes were individually validated by CI when Dependabot
-> merged them to \`develop\`. Trigger CI manually if you want an extra check.
-EOF
-)"
+            --body "$BODY"
