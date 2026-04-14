@@ -137,6 +137,10 @@ acceptance-up: ## Create Kind cluster and deploy operator in acceptance mode (bu
 acceptance-down: ## Tear down Kind acceptance cluster
 	kind delete cluster --name $(KIND_CLUSTER_NAME)
 
+.PHONY: mailbox-smoke-test
+mailbox-smoke-test: ## Validate mailbox file exchange on shared PVC (requires acceptance-up or any cluster with an 'nfs' StorageClass)
+	bash hack/mailbox-smoke-test.sh
+
 .PHONY: envtest
 envtest: ## Install setup-envtest
 	@test -f $(SETUP_ENVTEST) || go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
