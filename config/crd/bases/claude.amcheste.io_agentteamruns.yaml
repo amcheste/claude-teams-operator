@@ -468,6 +468,11 @@ spec:
                   url:
                     type: string
                 type: object
+              ready:
+                description: |-
+                  Ready reports how many teammate pods are ready vs. declared, in the form
+                  "running+completed/total" (e.g. "3/5"). Shown in `kubectl get` output.
+                type: string
               startedAt:
                 description: StartedAt is when the team began execution.
                 format: date-time

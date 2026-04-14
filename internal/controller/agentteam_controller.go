@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -54,6 +55,21 @@ type AgentTeamReconciler struct {
 	// Defaults to ReadWriteMany (requires NFS/EFS). Set to ReadWriteOnce for
 	// single-node clusters such as Kind where all pods share the same node.
 	PVCAccessMode corev1.PersistentVolumeAccessMode
+
+	// Recorder emits Kubernetes Events against AgentTeam objects. Populated by
+	// SetupWithManager. Tests may inject a fake recorder directly. The
+	// recordEvent helper tolerates a nil recorder so unit tests that construct
+	// a reconciler directly are not forced to wire one up.
+	Recorder record.EventRecorder
+}
+
+// recordEvent emits an Event against the AgentTeam if a Recorder is configured.
+// eventType is corev1.EventTypeNormal or corev1.EventTypeWarning.
+func (r *AgentTeamReconciler) recordEvent(team *claudev1alpha1.AgentTeam, eventType, reason, messageFmt string, args ...interface{}) {
+	if r.Recorder == nil {
+		return
+	}
+	r.Recorder.Eventf(team, eventType, reason, messageFmt, args...)
 }
 
 func (r *AgentTeamReconciler) pvcAccessMode() corev1.PersistentVolumeAccessMode {
@@ -84,6 +100,7 @@ func (r *AgentTeamReconciler) initImage() string {
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 
 func (r *AgentTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -161,6 +178,7 @@ func (r *AgentTeamReconciler) reconcilePending(ctx context.Context, team *claude
 	now := metav1.Now()
 	team.Status.StartedAt = &now
 	setCondition(team, metav1.ConditionTrue, "Initializing", "PVCs provisioned, init job started")
+	r.recordEvent(team, corev1.EventTypeNormal, "Initializing", "PVCs provisioned; init job started")
 	return ctrl.Result{RequeueAfter: 5 * time.Second}, r.Status().Update(ctx, team)
 }
 
@@ -177,6 +195,7 @@ func (r *AgentTeamReconciler) reconcileInitializing(ctx context.Context, team *c
 		log.Info("Team timed out during initialization")
 		team.Status.Phase = "TimedOut"
 		setCondition(team, metav1.ConditionFalse, "TimedOut", "Team exceeded configured timeout during initialization")
+		r.recordEvent(team, corev1.EventTypeWarning, "TimedOut", "Team exceeded configured timeout during initialization")
 		return ctrl.Result{}, r.Status().Update(ctx, team)
 	}
 
@@ -189,6 +208,7 @@ func (r *AgentTeamReconciler) reconcileInitializing(ctx context.Context, team *c
 		if failed {
 			team.Status.Phase = "Failed"
 			setCondition(team, metav1.ConditionFalse, "InitJobFailed", "Init job exceeded backoff limit")
+			r.recordEvent(team, corev1.EventTypeWarning, "InitJobFailed", "Init job exceeded backoff limit")
 			return ctrl.Result{}, r.Status().Update(ctx, team)
 		}
 		if !done {
@@ -222,6 +242,7 @@ func (r *AgentTeamReconciler) reconcileInitializing(ctx context.Context, team *c
 
 	team.Status.Phase = "Running"
 	setCondition(team, metav1.ConditionTrue, "Running", "Agent pods deployed")
+	r.recordEvent(team, corev1.EventTypeNormal, "Running", "Agent pods deployed")
 	return ctrl.Result{RequeueAfter: 30 * time.Second}, r.Status().Update(ctx, team)
 }
 
@@ -240,6 +261,7 @@ func (r *AgentTeamReconciler) reconcileRunning(ctx context.Context, team *claude
 		}
 		team.Status.Phase = "TimedOut"
 		setCondition(team, metav1.ConditionFalse, "TimedOut", "Team exceeded configured timeout")
+		r.recordEvent(team, corev1.EventTypeWarning, "TimedOut", "Team exceeded configured timeout; all pods terminated")
 		return ctrl.Result{}, r.Status().Update(ctx, team)
 	}
 
@@ -252,6 +274,7 @@ func (r *AgentTeamReconciler) reconcileRunning(ctx context.Context, team *claude
 		}
 		team.Status.Phase = "BudgetExceeded"
 		setCondition(team, metav1.ConditionFalse, "BudgetExceeded", "Estimated cost exceeded budget limit")
+		r.recordEvent(team, corev1.EventTypeWarning, "BudgetExceeded", "Estimated cost %s exceeded budget limit; all pods terminated", team.Status.EstimatedCost)
 		return ctrl.Result{}, r.Status().Update(ctx, team)
 	}
 
@@ -292,6 +315,7 @@ func (r *AgentTeamReconciler) reconcileRunning(ctx context.Context, team *claude
 	if anyFailed {
 		team.Status.Phase = "Failed"
 		setCondition(team, metav1.ConditionFalse, "AgentFailed", "One or more agent pods failed")
+		r.recordEvent(team, corev1.EventTypeWarning, "AgentFailed", "One or more agent pods failed")
 		return ctrl.Result{}, r.Status().Update(ctx, team)
 	}
 	if allDone {
@@ -302,6 +326,7 @@ func (r *AgentTeamReconciler) reconcileRunning(ctx context.Context, team *claude
 		}
 		team.Status.Phase = "Completed"
 		setCondition(team, metav1.ConditionFalse, "Completed", "All agents finished successfully")
+		r.recordEvent(team, corev1.EventTypeNormal, "Completed", "All agents finished successfully")
 		return ctrl.Result{}, r.Status().Update(ctx, team)
 	}
 
@@ -766,7 +791,18 @@ func (r *AgentTeamReconciler) buildAgentPod(
 
 // --- Status Sync ---
 
-// syncPodStatuses reads pod phases and updates team.Status.Lead and team.Status.Teammates.
+// syncPodStatuses refreshes team.Status.Lead and team.Status.Teammates from
+// current pod phases and computes team.Status.Ready ("running+completed/total").
+// Every teammate declared in the spec is ensured a status entry — even before
+// its pod is scheduled (dependsOn, approval gate, or first reconcile) — so
+// `kubectl describe` surfaces the full roster with a "Waiting" phase for
+// anything not yet deployed.
+//
+// TasksCompleted, TasksClaimed, and PendingApproval are preserved across
+// reconciles; they are populated by the approval-gate helpers and will be
+// filled from the shared task list in a later milestone. Transient API
+// errors when fetching a teammate pod leave the existing phase untouched
+// rather than clobbering it with "Waiting".
 func (r *AgentTeamReconciler) syncPodStatuses(ctx context.Context, team *claudev1alpha1.AgentTeam) {
 	// Lead pod.
 	leadPod := &corev1.Pod{}
@@ -778,25 +814,38 @@ func (r *AgentTeamReconciler) syncPodStatuses(ctx context.Context, team *claudev
 		team.Status.Lead.Phase = podPhaseToAgentPhase(leadPod)
 	}
 
-	// Teammate pods.
-	statusMap := map[string]*claudev1alpha1.TeammateStatus{}
-	for i := range team.Status.Teammates {
-		statusMap[team.Status.Teammates[i].Name] = &team.Status.Teammates[i]
+	// Preserve existing non-pod fields (TasksCompleted/Claimed, PendingApproval)
+	// across the rebuild below.
+	prev := map[string]claudev1alpha1.TeammateStatus{}
+	for _, st := range team.Status.Teammates {
+		prev[st.Name] = st
 	}
+
+	rebuilt := make([]claudev1alpha1.TeammateStatus, 0, len(team.Spec.Teammates))
+	ready := 0
 	for _, tm := range team.Spec.Teammates {
+		st := prev[tm.Name]
+		st.Name = tm.Name
+
 		pod := &corev1.Pod{}
-		if err := r.Get(ctx, types.NamespacedName{Name: agentPodName(team, tm.Name), Namespace: team.Namespace}, pod); err != nil {
-			continue
+		err := r.Get(ctx, types.NamespacedName{Name: agentPodName(team, tm.Name), Namespace: team.Namespace}, pod)
+		switch {
+		case err == nil:
+			st.PodName = pod.Name
+			st.Phase = podPhaseToAgentPhase(pod)
+		case errors.IsNotFound(err):
+			st.PodName = ""
+			st.Phase = "Waiting"
 		}
-		st, ok := statusMap[tm.Name]
-		if !ok {
-			team.Status.Teammates = append(team.Status.Teammates, claudev1alpha1.TeammateStatus{Name: tm.Name})
-			st = &team.Status.Teammates[len(team.Status.Teammates)-1]
-			statusMap[tm.Name] = st
+		// On other (transient) errors, leave st.Phase and st.PodName as-is.
+
+		if st.Phase == "Running" || st.Phase == "Completed" {
+			ready++
 		}
-		st.PodName = pod.Name
-		st.Phase = podPhaseToAgentPhase(pod)
+		rebuilt = append(rebuilt, st)
 	}
+	team.Status.Teammates = rebuilt
+	team.Status.Ready = fmt.Sprintf("%d/%d", ready, len(team.Spec.Teammates))
 }
 
 func podPhaseToAgentPhase(pod *corev1.Pod) string {
@@ -1130,6 +1179,9 @@ func boolPtr(b bool) *bool { return &b }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *AgentTeamReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.Recorder == nil {
+		r.Recorder = mgr.GetEventRecorderFor("agentteam-controller")
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&claudev1alpha1.AgentTeam{}).
 		Owns(&corev1.Pod{}).
