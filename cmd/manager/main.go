@@ -41,7 +41,7 @@ func main() {
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager.")
-	flag.StringVar(&agentImage, "agent-image", "", "Override the container image used for agent pods (default: ghcr.io/camlabs/claude-code-runner:latest).")
+	flag.StringVar(&agentImage, "agent-image", "", "Override the container image used for agent pods (default: ghcr.io/amcheste/claude-code-runner:latest).")
 	flag.StringVar(&initImage, "init-image", "", "Override the container image used for the repo init Job (default: alpine/git:latest).")
 	flag.BoolVar(&skipInitScript, "skip-init-script", false, "Replace the init Job git-clone script with a no-op exit 0. Use in acceptance tests where no real repo is available.")
 	flag.StringVar(&pvcAccessMode, "pvc-access-mode", "", "Override PVC access mode for all operator-managed PVCs (ReadWriteMany|ReadWriteOnce). Defaults to ReadWriteMany. Set to ReadWriteOnce for single-node clusters like Kind.")

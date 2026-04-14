@@ -1,7 +1,7 @@
 # claude-teams-operator Makefile
 
-IMG ?= ghcr.io/camlabs/claude-teams-operator:latest
-CLAUDE_CODE_IMG ?= ghcr.io/camlabs/claude-code-runner:latest
+IMG ?= ghcr.io/amcheste/claude-teams-operator:latest
+CLAUDE_CODE_IMG ?= ghcr.io/amcheste/claude-code-runner:latest
 KIND_CLUSTER_NAME ?= claude-teams
 
 # Tool versions

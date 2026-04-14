@@ -61,6 +61,31 @@ jobs:
           provenance: true
           sbom: true
 
+      - name: Extract Docker metadata (runner)
+        id: meta-runner
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6
+        with:
+          images: ghcr.io/amcheste/claude-code-runner
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix=sha-
+
+      - name: Build and push runner image
+        id: build-runner
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
+        with:
+          context: .
+          file: docker/Dockerfile.claude-code
+          push: true
+          tags: ${{ steps.meta-runner.outputs.tags }}
+          labels: ${{ steps.meta-runner.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
       - name: Install Cosign
         uses: sigstore/cosign-installer@d7d6bc7722e3daa8354c50bcb52f4837da5e9b6a # v3
 
@@ -68,6 +93,11 @@ jobs:
         run: |
           cosign sign --yes \
             ghcr.io/amcheste/claude-teams-operator@${{ steps.build-operator.outputs.digest }}
+
+      - name: Sign runner image with Sigstore keyless
+        run: |
+          cosign sign --yes \
+            ghcr.io/amcheste/claude-code-runner@${{ steps.build-runner.outputs.digest }}
 
   # ── Create GitHub Release ─────────────────────────────────────────────────
   release:
@@ -113,11 +143,16 @@ jobs:
 
             ```
             ghcr.io/amcheste/claude-teams-operator:${{ github.ref_name }}
+            ghcr.io/amcheste/claude-code-runner:${{ github.ref_name }}
             ```
 
             Images are signed with [Sigstore Cosign](https://docs.sigstore.dev/) (keyless). Verify with:
             ```bash
             cosign verify ghcr.io/amcheste/claude-teams-operator:${{ github.ref_name }} \
+              --certificate-identity-regexp="https://github.com/amcheste/claude-teams-operator" \
+              --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
+
+            cosign verify ghcr.io/amcheste/claude-code-runner:${{ github.ref_name }} \
               --certificate-identity-regexp="https://github.com/amcheste/claude-teams-operator" \
               --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
             ```
