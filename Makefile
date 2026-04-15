@@ -141,6 +141,18 @@ acceptance-down: ## Tear down Kind acceptance cluster
 mailbox-smoke-test: ## Validate mailbox file exchange on shared PVC (requires acceptance-up or any cluster with an 'nfs' StorageClass)
 	bash hack/mailbox-smoke-test.sh
 
+.PHONY: test-e2e
+test-e2e: ## Run E2E tests against the real Anthropic API (requires e2e-up and ANTHROPIC_API_KEY)
+	go test ./test/e2e/... -tags=e2e -v -count=1 -timeout=20m
+
+.PHONY: e2e-up
+e2e-up: ## Create Kind cluster + build real runner image + deploy operator for E2E (requires ANTHROPIC_API_KEY)
+	PATH="/opt/homebrew/bin:/usr/local/bin:$(PATH)" bash hack/e2e-setup.sh
+
+.PHONY: e2e-down
+e2e-down: ## Tear down Kind E2E cluster
+	kind delete cluster --name $${KIND_CLUSTER_NAME:-claude-teams-e2e}
+
 .PHONY: envtest
 envtest: ## Install setup-envtest
 	@test -f $(SETUP_ENVTEST) || go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
