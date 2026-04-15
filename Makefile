@@ -19,6 +19,12 @@ help: ## Display this help
 .PHONY: manifests
 manifests: controller-gen ## Generate CRD manifests
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	# Mirror CRDs into the Helm chart's crds/ dir. Helm installs anything in
+	# crds/ on `helm install` (but not on upgrade, by design). Without this
+	# `helm install` deploys the operator but leaves it crash-looping waiting
+	# for CRDs that were never applied.
+	@mkdir -p charts/claude-teams-operator/crds
+	@cp -f config/crd/bases/*.yaml charts/claude-teams-operator/crds/
 
 .PHONY: generate
 generate: controller-gen ## Generate deepcopy methods
