@@ -99,6 +99,8 @@ Acknowledging this honestly makes the talk more credible. Frame it as: "here's t
 What happened, what you tried, what you decided. One paragraph is enough.
 -->
 
+### 2026-04-14 Proving RWX without an RWX provisioner
+The mailbox-exchange claim (`~/.claude/teams/{team}/inboxes/{agent}.json` visible across two pods) needed a smoke test we could run anywhere, including single-node Kind. The real blocker is that Kind's built-in `local-path-provisioner` only exposes ReadWriteOnce — it literally cannot advertise RWX. The acceptance setup works around this with a StorageClass alias named `nfs` that points back at `rancher.io/local-path`, giving PVCs the *name* they expect while leaning on the fact that on a single-node cluster every pod runs on the same node, so a hostPath volume is visible to every pod simultaneously. That is not "true" RWX — it's a coincidence of topology that makes RWX-semantics tests pass. The trade-off for the talk: we can prove the *architectural claim* (file-based coordination works when pods share a mount) on any laptop, but must label real multi-node deployments as requiring an actual RWX backend (NFS, EFS, Filestore, etc.). The smoke test (`hack/mailbox-smoke-test.sh`) runs against whatever the cluster offers and reports the effective access mode in its PASS line so this distinction doesn't get lost.
 
 ---
 

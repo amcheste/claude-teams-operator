@@ -1,0 +1,97 @@
+name: E2E Tests (Real Claude API)
+
+# Real-API E2E runs hit the Anthropic API and cost money per run. We gate them
+# tightly:
+#   * Only on pushes to main (post-merge, final verification before a release)
+#   * Only when the ANTHROPIC_API_KEY secret is configured
+#   * workflow_dispatch available for ad-hoc manual runs by maintainers
+#
+# Rationale: this is the only test that proves the full AgentTeam coordination
+# story works with real Claude Code. Worth running, but not on every PR.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Preflight checks the secret exists. Without this, a fork or maintainer
+  # without the secret configured would get a loud, late failure from
+  # test BeforeSuite instead of a clean skip.
+  preflight:
+    name: Preflight (secret check)
+    runs-on: ubuntu-latest
+    outputs:
+      has_key: ${{ steps.check.outputs.has_key }}
+    steps:
+      - id: check
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "has_key=true" >> "$GITHUB_OUTPUT"
+            echo "ANTHROPIC_API_KEY is configured — E2E job will run."
+          else
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::ANTHROPIC_API_KEY not configured — E2E job will be skipped."
+          fi
+
+  e2e:
+    name: E2E (Kind + real runner)
+    needs: preflight
+    if: needs.preflight.outputs.has_key == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # ── Kind ──────────────────────────────────────────────────────────────
+      - name: Install Kind
+        run: go install sigs.k8s.io/kind@latest
+
+      # ── Build images + bring up cluster via the shared setup script ───────
+      # hack/e2e-setup.sh does all the image-building, CRD-installing, operator-
+      # deploying work. We re-use it here so the CI path and the local path
+      # stay in lock-step.
+      - name: Bring up E2E cluster
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          KIND_CLUSTER_NAME: claude-teams-e2e
+        run: make e2e-up
+
+      # ── Run the suite ──────────────────────────────────────────────────────
+      - name: Run E2E tests
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: make test-e2e
+
+      # ── Debug on failure ───────────────────────────────────────────────────
+      - name: Collect operator logs on failure
+        if: failure()
+        run: |
+          echo "=== Operator logs ==="
+          kubectl logs -n claude-teams-system \
+            deployment/controller-manager --tail=200 || true
+
+          echo "=== AgentTeams ==="
+          kubectl get agentteams -A -o wide || true
+
+          echo "=== Pods in test namespaces ==="
+          kubectl get pods -A --selector='claude.amcheste.io/team' -o wide || true
+
+          echo "=== Recent events ==="
+          kubectl get events -A --sort-by='.lastTimestamp' | tail -50 || true
+
+      - name: Delete Kind cluster
+        if: always()
+        env:
+          KIND_CLUSTER_NAME: claude-teams-e2e
+        run: make e2e-down

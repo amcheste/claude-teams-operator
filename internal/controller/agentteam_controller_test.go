@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -1646,4 +1648,178 @@ func mountPaths(pod *corev1.Pod) []string {
 		paths[i] = m.MountPath
 	}
 	return paths
+}
+
+// drainFakeRecorder reads everything currently sitting in the FakeRecorder's
+// channel into a slice. FakeRecorder's channel is buffered — events arrive
+// synchronously from Eventf — so a single non-blocking drain after a reconcile
+// call gives us everything emitted by that call.
+func drainFakeRecorder(r *record.FakeRecorder) []string {
+	var events []string
+	for {
+		select {
+		case e := <-r.Events:
+			events = append(events, e)
+		default:
+			return events
+		}
+	}
+}
+
+// --- syncPodStatuses (extended behavior) ---
+
+// TestSyncPodStatuses_EnsuresEntryForEveryTeammate verifies that every spec
+// teammate gets a TeammateStatus entry even before its pod is scheduled —
+// critical for `kubectl describe` to surface the full roster during startup.
+func TestSyncPodStatuses_EnsuresEntryForEveryTeammate(t *testing.T) {
+	team := minimalTeam("sync-empty")
+	team.Spec.Teammates = append(team.Spec.Teammates, claudev1alpha1.TeammateSpec{
+		Name: "reviewer", Model: "sonnet", Prompt: "Review the work",
+	})
+	r := newReconciler(team) // no pods at all
+	team = fetch(t, r, "sync-empty")
+
+	r.syncPodStatuses(context.Background(), team)
+
+	require.Len(t, team.Status.Teammates, 2, "every spec teammate must surface in status even pre-pod")
+	assert.Equal(t, "worker", team.Status.Teammates[0].Name)
+	assert.Equal(t, "Waiting", team.Status.Teammates[0].Phase)
+	assert.Empty(t, team.Status.Teammates[0].PodName, "pre-pod teammate must not carry a PodName")
+	assert.Equal(t, "reviewer", team.Status.Teammates[1].Name)
+	assert.Equal(t, "Waiting", team.Status.Teammates[1].Phase)
+}
+
+// TestSyncPodStatuses_ComputesReadyString verifies Ready is populated as
+// "running+completed/total" — the value rendered in the `kubectl get` Ready
+// column and the talk-ready demo.
+func TestSyncPodStatuses_ComputesReadyString(t *testing.T) {
+	team := minimalTeam("sync-ready")
+	team.Spec.Teammates = append(team.Spec.Teammates,
+		claudev1alpha1.TeammateSpec{Name: "reviewer", Model: "sonnet", Prompt: "Review"},
+		claudev1alpha1.TeammateSpec{Name: "idle", Model: "sonnet", Prompt: "Idle"},
+	)
+	workerPod := runningPod("sync-ready-worker", "default", "sync-ready")
+	reviewerPod := succeededPod("sync-ready-reviewer", "default", "sync-ready")
+	// 'idle' teammate has no pod → Waiting, not counted.
+	r := newReconciler(team, workerPod, reviewerPod)
+	team = fetch(t, r, "sync-ready")
+
+	r.syncPodStatuses(context.Background(), team)
+
+	assert.Equal(t, "2/3", team.Status.Ready,
+		"Ready must count Running+Completed teammates against the spec total")
+}
+
+// TestSyncPodStatuses_PreservesPendingApproval verifies that re-syncing does
+// not clobber non-pod fields like PendingApproval that are populated by the
+// approval-gate helpers on a separate code path.
+func TestSyncPodStatuses_PreservesPendingApproval(t *testing.T) {
+	team := minimalTeam("sync-preserve")
+	team.Status.Teammates = []claudev1alpha1.TeammateStatus{
+		{Name: "worker", PendingApproval: "spawn-worker"},
+	}
+	r := newReconciler(team) // no pods
+	team = fetch(t, r, "sync-preserve")
+
+	r.syncPodStatuses(context.Background(), team)
+
+	require.Len(t, team.Status.Teammates, 1)
+	assert.Equal(t, "spawn-worker", team.Status.Teammates[0].PendingApproval,
+		"PendingApproval must survive a sync cycle")
+	assert.Equal(t, "Waiting", team.Status.Teammates[0].Phase,
+		"pod-missing teammate must report Waiting even when other fields are preserved")
+}
+
+// --- Event emission on phase transitions ---
+
+// TestReconcilePending_EmitsInitializingEvent verifies the Pending → Initializing
+// transition emits a Normal event so `kubectl describe` surfaces it.
+func TestReconcilePending_EmitsInitializingEvent(t *testing.T) {
+	team := withWorkspace(minimalTeam("evt-init"))
+	r := newReconciler(team)
+	recorder := record.NewFakeRecorder(8)
+	r.Recorder = recorder
+	ctx := context.Background()
+
+	_, err := r.reconcilePending(ctx, fetch(t, r, "evt-init"))
+	require.NoError(t, err)
+
+	events := drainFakeRecorder(recorder)
+	require.NotEmpty(t, events, "expected at least one event on transition")
+	found := false
+	for _, e := range events {
+		if strings.Contains(e, "Normal") && strings.Contains(e, "Initializing") {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected a Normal Initializing event, got: %v", events)
+}
+
+// TestReconcileRunning_EmitsCompletedEvent verifies the Running → Completed
+// transition emits a Normal Completed event.
+func TestReconcileRunning_EmitsCompletedEvent(t *testing.T) {
+	team := minimalTeam("evt-done")
+	startTime := metav1.NewTime(time.Now().Add(-1 * time.Minute))
+	team.Status.Phase = "Running"
+	team.Status.StartedAt = &startTime
+	leadPod := succeededPod("evt-done-lead", "default", "evt-done")
+	workerPod := succeededPod("evt-done-worker", "default", "evt-done")
+	r := newReconciler(team, leadPod, workerPod)
+	recorder := record.NewFakeRecorder(8)
+	r.Recorder = recorder
+	ctx := context.Background()
+
+	_, err := r.reconcileRunning(ctx, fetch(t, r, "evt-done"))
+	require.NoError(t, err)
+
+	events := drainFakeRecorder(recorder)
+	found := false
+	for _, e := range events {
+		if strings.Contains(e, "Normal") && strings.Contains(e, "Completed") {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected a Normal Completed event, got: %v", events)
+}
+
+// TestReconcileRunning_EmitsWarningOnAgentFailure verifies a failed teammate
+// pod triggers a Warning AgentFailed event.
+func TestReconcileRunning_EmitsWarningOnAgentFailure(t *testing.T) {
+	team := minimalTeam("evt-fail")
+	startTime := metav1.NewTime(time.Now().Add(-1 * time.Minute))
+	team.Status.Phase = "Running"
+	team.Status.StartedAt = &startTime
+	leadPod := runningPod("evt-fail-lead", "default", "evt-fail")
+	workerPod := failedPod("evt-fail-worker", "default", "evt-fail")
+	r := newReconciler(team, leadPod, workerPod)
+	recorder := record.NewFakeRecorder(8)
+	r.Recorder = recorder
+	ctx := context.Background()
+
+	_, err := r.reconcileRunning(ctx, fetch(t, r, "evt-fail"))
+	require.NoError(t, err)
+
+	events := drainFakeRecorder(recorder)
+	found := false
+	for _, e := range events {
+		if strings.Contains(e, "Warning") && strings.Contains(e, "AgentFailed") {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected a Warning AgentFailed event, got: %v", events)
+}
+
+// TestRecordEvent_NilRecorderIsNoop verifies recordEvent is safe with a nil
+// Recorder — unit tests construct reconcilers directly without
+// SetupWithManager, so recordEvent calls from production code paths must not
+// panic in that setup.
+func TestRecordEvent_NilRecorderIsNoop(t *testing.T) {
+	r := &AgentTeamReconciler{}
+	team := minimalTeam("nil-rec")
+	assert.NotPanics(t, func() {
+		r.recordEvent(team, corev1.EventTypeNormal, "Test", "no panic with nil recorder")
+	})
 }

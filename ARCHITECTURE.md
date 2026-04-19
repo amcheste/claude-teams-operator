@@ -84,6 +84,51 @@ ln -sfn /var/claude-state/tasks ~/.claude/tasks
 
 This approach preserves the native Agent Teams protocol without modification while avoiding a conflict between the shared state and the agent's local `~/.claude/` configuration.
 
+## Storage Requirements
+
+All operator-managed PVCs — `team-state`, `repo`, and (in Cowork mode) `output` — default to `ReadWriteMany` access on a StorageClass named `nfs`. The requirement is not incidental: the lead and every teammate pod must open the same mailbox and task files concurrently, and on a multi-node cluster they will generally land on different nodes. `ReadWriteOnce` can only bind to one node at a time, so it is not a viable default.
+
+### Why ReadWriteMany
+
+Each agent pod does two concurrent things against shared state:
+
+- **Writing into peers' inboxes** — the lead writes `teams/{team}/inboxes/{teammate}.json`; each teammate writes to the lead's inbox and occasionally to other teammates'.
+- **Claiming tasks** — multiple teammates race to claim items from `tasks/{team}/tasks.json`.
+
+If the backing PVC cannot be mounted on more than one node, the second pod will fail to schedule (`volume already attached to a different node`) and the team deadlocks before the first mailbox round-trip.
+
+### Supported storage backends
+
+The operator itself has no opinion about the CSI driver — it asks for a PVC with `accessModes: [ReadWriteMany]` and a `storageClassName` that you supply. The table below lists drivers known to satisfy the RWX contract:
+
+| Platform | Driver | Notes |
+|----------|--------|-------|
+| Kind (multi-node dev) | `nfs-ganesha/nfs-server-provisioner` | Installed by `hack/kind-setup.sh` as StorageClass `nfs`. Real RWX over an in-cluster NFS server. |
+| Kind (single-node acceptance) | `rancher.io/local-path` under the `nfs` StorageClass alias | Installed by `hack/acceptance-setup.sh`. See "Single-node fallback" — not true RWX. |
+| Amazon EKS | [EFS CSI driver](https://github.com/kubernetes-sigs/aws-efs-csi-driver) | StorageClass pointing at an EFS file system. RWX natively. |
+| Google GKE | [Filestore CSI driver](https://cloud.google.com/filestore/docs/csi-driver) | Enable the Filestore CSI add-on; Filestore instances advertise RWX. |
+| Azure AKS | [Azure Files CSI driver](https://learn.microsoft.com/azure/aks/azure-files-csi) | SMB or NFS-protocol file shares; both support RWX. |
+| Bare-metal / on-prem | [`nfs-subdir-external-provisioner`](https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner), Longhorn, Rook/Ceph (CephFS) | Any CSI driver that advertises `ReadWriteMany` in its StorageClass. |
+
+The StorageClass name the operator requests defaults to `nfs` and is overridable at install time via the Helm value `storage.storageClassName`.
+
+### Single-node fallback
+
+For laptops and CI — Kind, k3d, minikube — a full RWX provisioner is overkill. The operator accepts a `--pvc-access-mode=ReadWriteOnce` flag that switches every managed PVC from `ReadWriteMany` to `ReadWriteOnce`. This works **only** on single-node clusters, because every pod lands on the same node and a hostPath-backed RWO PVC is effectively visible to all of them.
+
+`hack/acceptance-setup.sh` uses exactly this trick: it creates an alias StorageClass named `nfs` over `rancher.io/local-path` so the operator's PVC specs still validate, then sets `--pvc-access-mode=ReadWriteOnce` on the controller deployment.
+
+The architectural claim — that a shared mount is sufficient to ferry mailbox JSON between pods — can be verified on any single-node cluster with:
+
+```bash
+make acceptance-up
+make mailbox-smoke-test
+```
+
+The smoke test reports the effective StorageClass and AccessMode on its PASS line so it is obvious whether you exercised real RWX or the single-node fallback.
+
+> **Do not use `--pvc-access-mode=ReadWriteOnce` on a multi-node production cluster.** A second pod scheduled on a different node will fail to mount the PVC, and the team will deadlock.
+
 ## Coordination Protocol
 
 The native Agent Teams protocol is file-based:

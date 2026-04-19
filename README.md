@@ -46,11 +46,36 @@ Both modes share the same coordination protocol (shared PVCs, mailboxes, task li
 ### Prerequisites
 
 - Kubernetes 1.28+
-- ReadWriteMany PVC support (NFS, EFS, or a compatible CSI driver)
+- ReadWriteMany PVC support (NFS, EFS, or a compatible CSI driver — see [ARCHITECTURE.md § Storage Requirements](ARCHITECTURE.md#storage-requirements) for options)
 - Claude Code CLI access (Max subscription or API key)
 - Opus 4.6 model access (required for Agent Teams)
 
-### Local Development with Kind
+### Install on an existing cluster (Helm)
+
+```bash
+# 1. Install the operator (CRDs + controller + RBAC)
+helm install claude-teams-operator \
+  oci://ghcr.io/amcheste/charts/claude-teams-operator \
+  --namespace claude-teams-system --create-namespace
+
+# 2. Create an API key secret in the namespace where your teams will run
+kubectl create namespace dev-agents
+kubectl create secret generic anthropic-api-key \
+  --namespace dev-agents \
+  --from-literal=ANTHROPIC_API_KEY=sk-ant-...
+
+# 3. Apply a sample team
+kubectl apply -n dev-agents -f \
+  https://raw.githubusercontent.com/amcheste/claude-teams-operator/main/config/samples/auth-refactor-team.yaml
+
+# 4. Watch the team progress
+kubectl get agentteams -n dev-agents -w
+kubectl describe agentteam auth-refactor -n dev-agents
+```
+
+### Local development with Kind
+
+For contributors and anyone who wants to run the full stack from source:
 
 ```bash
 # 1. Create a Kind cluster with NFS provisioner
@@ -69,11 +94,9 @@ kubectl create secret generic anthropic-api-key \
 
 # 5. Apply a sample team
 kubectl apply -f config/samples/auth-refactor-team.yaml
-
-# 6. Watch the team progress
-kubectl get agentteams -n dev-agents -w
-kubectl describe agentteam auth-refactor -n dev-agents
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full dev loop (testing, linting, manifest regeneration).
 
 ## Example: Coding Team
 
@@ -224,30 +247,32 @@ spec:
 
 ## Status
 
-Watch team progress:
+Watch team progress. The `Ready` column reports `running+completed/total` teammates, so `2/3` means two of three workers are up (or have finished) while one is still spawning or blocked on a dependency:
 
 ```bash
 kubectl get agentteams -A
-# NAME           PHASE      TEAMMATES   TASKS DONE   COST    AGE
-# auth-refactor  Running    3           7            $1.42   14m
-# q3-report      Completed  2           12           $3.80   2h
+# NAME           PHASE      READY   TASKS DONE   COST    AGE
+# auth-refactor  Running    2/3     7            $1.42   14m
+# q3-report      Completed  2/2     12           $3.80   2h
 ```
 
-Inspect conditions:
+Inspect details, including operator events emitted at every phase transition:
 
 ```bash
 kubectl describe agentteam auth-refactor -n dev-agents
 # Status:
 #   Phase: Running
+#   Ready: 2/3
 #   Estimated Cost: 1.42
 #   Lead:
 #     Pod Name: auth-refactor-lead
 #     Phase: Running
 #   Teammates:
-#     - Name: backend-api,  Phase: Running
-#     - Name: test-coverage, Phase: Pending (dependsOn: backend-api)
-#   Conditions:
-#     - Type: Progressing, Status: True, Reason: Running
+#     - Name: backend-api,   Phase: Running
+#     - Name: test-coverage, Phase: Waiting  (dependsOn: backend-api)
+# Events:
+#   Normal  Initializing  5m   agentteam-controller  Provisioned PVCs and launched init Job
+#   Normal  Running       4m   agentteam-controller  All agent pods started
 ```
 
 ## Approval Gates
@@ -265,9 +290,21 @@ kubectl annotate agentteam my-team \
 
 If `channel: webhook` is set, the operator POSTs a JSON payload to `webhookUrl` when the gate is triggered, allowing an external system to present the approval to a human and then apply the annotation.
 
+## Documentation
+
+This README is the entry point. For deeper dives, every topic lives in a dedicated in-repo document:
+
+| Document | Read when you want to… |
+|----------|-----------------------|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Understand how the operator models Agent Teams — phase state machine, PVC layout, RWX storage backends, coordination protocol, key design tradeoffs. |
+| [TESTING.md](TESTING.md) | See the test strategy (unit / integration / acceptance / E2E), how to run each suite, and what each one actually verifies. |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Set up a dev environment, run the full build/test loop, and follow the branch + PR workflow. |
+| [SECURITY.md](SECURITY.md) | Report a vulnerability or review the project's security policy. |
+| [KUBECON.md](KUBECON.md) | See the talk framing and "interesting problems" log — useful context for why specific architectural choices were made. |
+
 ## Development
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development guide and [ARCHITECTURE.md](ARCHITECTURE.md) for design documentation.
+Common Makefile targets (full loop in [CONTRIBUTING.md](CONTRIBUTING.md)):
 
 ```bash
 make build        # Build operator binary
