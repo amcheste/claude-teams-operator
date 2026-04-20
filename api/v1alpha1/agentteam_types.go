@@ -395,6 +395,11 @@ type AgentTeamStatus struct {
 	// EstimatedCost is the estimated API cost in USD (e.g. "4.50").
 	EstimatedCost string `json:"estimatedCost,omitempty"`
 
+	// Ready reports how many teammate pods are ready vs. declared, in the form
+	// "running+completed/total" (e.g. "3/5"). Shown in `kubectl get` output.
+	// +optional
+	Ready string `json:"ready,omitempty"`
+
 	// Lead reports the team lead's status.
 	// +optional
 	Lead *AgentStatus `json:"lead,omitempty"`
@@ -463,7 +468,7 @@ type PullRequestStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
-// +kubebuilder:printcolumn:name="Teammates",type=integer,JSONPath=`.status.tasks.total`
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.ready`
 // +kubebuilder:printcolumn:name="Tasks Done",type=integer,JSONPath=`.status.tasks.completed`
 // +kubebuilder:printcolumn:name="Cost",type=string,JSONPath=`.status.estimatedCost`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`

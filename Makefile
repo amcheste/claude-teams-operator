@@ -1,7 +1,7 @@
 # claude-teams-operator Makefile
 
-IMG ?= ghcr.io/camlabs/claude-teams-operator:latest
-CLAUDE_CODE_IMG ?= ghcr.io/camlabs/claude-code-runner:latest
+IMG ?= ghcr.io/amcheste/claude-teams-operator:latest
+CLAUDE_CODE_IMG ?= ghcr.io/amcheste/claude-code-runner:latest
 KIND_CLUSTER_NAME ?= claude-teams
 
 # Tool versions
@@ -19,6 +19,12 @@ help: ## Display this help
 .PHONY: manifests
 manifests: controller-gen ## Generate CRD manifests
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	# Mirror CRDs into the Helm chart's crds/ dir. Helm installs anything in
+	# crds/ on `helm install` (but not on upgrade, by design). Without this
+	# `helm install` deploys the operator but leaves it crash-looping waiting
+	# for CRDs that were never applied.
+	@mkdir -p charts/claude-teams-operator/crds
+	@cp -f config/crd/bases/*.yaml charts/claude-teams-operator/crds/
 
 .PHONY: generate
 generate: controller-gen ## Generate deepcopy methods
@@ -136,6 +142,22 @@ acceptance-up: ## Create Kind cluster and deploy operator in acceptance mode (bu
 .PHONY: acceptance-down
 acceptance-down: ## Tear down Kind acceptance cluster
 	kind delete cluster --name $(KIND_CLUSTER_NAME)
+
+.PHONY: mailbox-smoke-test
+mailbox-smoke-test: ## Validate mailbox file exchange on shared PVC (requires acceptance-up or any cluster with an 'nfs' StorageClass)
+	bash hack/mailbox-smoke-test.sh
+
+.PHONY: test-e2e
+test-e2e: ## Run E2E tests against the real Anthropic API (requires e2e-up and ANTHROPIC_API_KEY)
+	go test ./test/e2e/... -tags=e2e -v -count=1 -timeout=20m
+
+.PHONY: e2e-up
+e2e-up: ## Create Kind cluster + build real runner image + deploy operator for E2E (requires ANTHROPIC_API_KEY)
+	PATH="/opt/homebrew/bin:/usr/local/bin:$(PATH)" bash hack/e2e-setup.sh
+
+.PHONY: e2e-down
+e2e-down: ## Tear down Kind E2E cluster
+	kind delete cluster --name $${KIND_CLUSTER_NAME:-claude-teams-e2e}
 
 .PHONY: envtest
 envtest: ## Install setup-envtest

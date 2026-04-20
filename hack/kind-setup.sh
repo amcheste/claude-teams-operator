@@ -37,7 +37,14 @@ helm install nfs-server nfs-ganesha/nfs-server-provisioner \
   --set persistence.size=50Gi \
   --set storageClass.name=nfs \
   --set storageClass.defaultClass=false \
-  --wait
+  --wait \
+  --timeout=15m
+# 15m is deliberate: the nfs-provisioner image is ~500MB and first-time
+# pulls routinely take 5–10 minutes on home connections or behind slow
+# registry mirrors. Helm's default --wait timeout of 5m was hitting failures
+# here even though the deployment itself was healthy; the resources would
+# come up a minute later but with the release marked "failed", confusing
+# contributors into thinking the setup was broken.
 
 echo ""
 echo "[3/5] Creating dev-agents namespace"
