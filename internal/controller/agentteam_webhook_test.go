@@ -142,26 +142,28 @@ func TestReconcileRunning_BudgetWarningFiresOnlyOnce(t *testing.T) {
 	}
 }
 
-func TestReconcileRunning_FiresTeammateErrorOnPodFailure(t *testing.T) {
+func TestReconcileRunning_FiresTeammateErrorOnRespawn(t *testing.T) {
 	url, events := webhookCaptureServer(t)
 
-	team := withWebhook(minimalTeam("wh-fail"), url, []string{"teammate.error"})
+	team := withWebhook(minimalTeam("wh-respawn"), url, []string{"teammate.error"})
 	team.Status.Phase = "Running"
 
-	// A teammate pod in Failed phase triggers anyFailed → fireTeammateErrorEvents.
+	// Teammate pod in Failed phase, under the default restart limit — the
+	// reconciler should delete, re-spawn, and fire teammate.error with
+	// restart metadata.
 	leadPod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "wh-fail-lead",
+			Name:      "wh-respawn-lead",
 			Namespace: "default",
-			Labels:    map[string]string{"claude.amcheste.io/team": "wh-fail"},
+			Labels:    map[string]string{"claude.amcheste.io/team": "wh-respawn"},
 		},
-		Status: corev1.PodStatus{Phase: corev1.PodSucceeded},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
 	}
 	workerPod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "wh-fail-worker",
+			Name:      "wh-respawn-worker",
 			Namespace: "default",
-			Labels:    map[string]string{"claude.amcheste.io/team": "wh-fail"},
+			Labels:    map[string]string{"claude.amcheste.io/team": "wh-respawn"},
 		},
 		Status: corev1.PodStatus{
 			Phase:   corev1.PodFailed,
@@ -171,7 +173,66 @@ func TestReconcileRunning_FiresTeammateErrorOnPodFailure(t *testing.T) {
 	}
 
 	r := newReconciler(team, leadPod, workerPod)
-	team = fetch(t, r, "wh-fail")
+	team = fetch(t, r, "wh-respawn")
+	team.Status.Phase = "Running"
+	startTime := metav1.NewTime(time.Now().Add(-1 * time.Minute))
+	team.Status.StartedAt = &startTime
+	ctx := context.Background()
+
+	_, err := r.reconcileRunning(ctx, team)
+	require.NoError(t, err)
+	assert.Equal(t, "Running", team.Status.Phase, "team must stay Running while under restart limit")
+
+	msg := waitForEvent(t, events)
+	assert.Equal(t, "teammate.error", msg["event"])
+	data, ok := msg["data"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "worker", data["teammate"])
+	assert.Equal(t, "wh-respawn-worker", data["pod"])
+	assert.Equal(t, "Error", data["reason"])
+	assert.Equal(t, "agent crashed", data["message"])
+	assert.Equal(t, "respawn", data["action"])
+	// JSON unmarshals numbers as float64.
+	assert.Equal(t, float64(1), data["restartCount"])
+	assert.Equal(t, float64(3), data["maxRestarts"])
+}
+
+func TestReconcileRunning_FiresTeammateErrorOnRestartLimitExceeded(t *testing.T) {
+	url, events := webhookCaptureServer(t)
+
+	team := withWebhook(minimalTeam("wh-exceed"), url, []string{"teammate.error"})
+	team.Status.Phase = "Running"
+
+	leadPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "wh-exceed-lead",
+			Namespace: "default",
+			Labels:    map[string]string{"claude.amcheste.io/team": "wh-exceed"},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodSucceeded},
+	}
+	workerPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "wh-exceed-worker",
+			Namespace: "default",
+			Labels:    map[string]string{"claude.amcheste.io/team": "wh-exceed"},
+		},
+		Status: corev1.PodStatus{
+			Phase:   corev1.PodFailed,
+			Reason:  "Error",
+			Message: "agent crashed",
+		},
+	}
+
+	r := newReconciler(team, leadPod, workerPod)
+	team = fetch(t, r, "wh-exceed")
+	team.Status.Phase = "Running"
+	startTime := metav1.NewTime(time.Now().Add(-1 * time.Minute))
+	team.Status.StartedAt = &startTime
+	// Exhaust restarts so the next failure fails the team.
+	team.Status.Teammates = []claudev1alpha1.TeammateStatus{
+		{Name: "worker", RestartCount: 3},
+	}
 	ctx := context.Background()
 
 	_, err := r.reconcileRunning(ctx, team)
@@ -183,9 +244,10 @@ func TestReconcileRunning_FiresTeammateErrorOnPodFailure(t *testing.T) {
 	data, ok := msg["data"].(map[string]interface{})
 	require.True(t, ok)
 	assert.Equal(t, "worker", data["teammate"])
-	assert.Equal(t, "wh-fail-worker", data["pod"])
-	assert.Equal(t, "Error", data["reason"])
-	assert.Equal(t, "agent crashed", data["message"])
+	// Final failure event from fireTeammateErrorEvents does not include the
+	// "respawn" action marker.
+	_, hasAction := data["action"]
+	assert.False(t, hasAction, "final failure event must not carry respawn metadata")
 }
 
 func TestWebhookEvents_OnlySubscribedEventsFire(t *testing.T) {

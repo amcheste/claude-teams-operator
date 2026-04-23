@@ -303,6 +303,14 @@ type LifecycleSpec struct {
 	// Grant approval by annotating the AgentTeam: kubectl annotate agentteam <name> approved.claude.amcheste.io/<event>=true
 	// +optional
 	ApprovalGates []ApprovalGateSpec `json:"approvalGates,omitempty"`
+
+	// MaxRestarts bounds how many times each teammate pod may be re-spawned
+	// after a Failed phase before the team itself is marked Failed. The lead
+	// pod is not subject to this limit — a lead crash always fails the team.
+	// +kubebuilder:default=3
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	MaxRestarts *int32 `json:"maxRestarts,omitempty"`
 }
 
 // PullRequestSpec configures automatic PR creation.
@@ -447,6 +455,12 @@ type TeammateStatus struct {
 	// PendingApproval is the approval gate event this teammate is waiting on, if any.
 	// +optional
 	PendingApproval string `json:"pendingApproval,omitempty"`
+
+	// RestartCount is the number of times this teammate's pod has been
+	// re-spawned after a Failed phase. The team is marked Failed when any
+	// teammate's RestartCount reaches Spec.Lifecycle.MaxRestarts.
+	// +optional
+	RestartCount int32 `json:"restartCount,omitempty"`
 }
 
 // TaskSummary reports aggregate task progress.
