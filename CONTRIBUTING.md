@@ -94,50 +94,30 @@ go test ./internal/controller/... -v                  # verbose
 go test ./internal/controller/... -run TestMyTest      # specific test
 ```
 
-## Branch Model
+## Branching, Commits, and Releases
 
-| Branch | Purpose |
-|--------|---------|
-| `main` | Latest release — always stable, never directly committed to |
-| `develop` | Integration branch — all PRs target here |
-| `feat/*`, `fix/*`, `docs/*` etc. | Short-lived branches off `develop` |
+The branching strategy, commit convention, and release process follow the canonical rules documented in my engineering handbook:
 
-## Commit Convention
+- **Why:** [Branching Strategy philosophy](https://github.com/amcheste/engineering-handbook/blob/main/docs/philosophies/branching-strategy.md)
+- **How:** [Branching & Releases workflow](https://github.com/amcheste/engineering-handbook/blob/main/docs/workflows/branching-and-releases.md)
 
-This project uses [Conventional Commits](https://www.conventionalcommits.org/):
+In short: branch from `develop`, one logical change per PR, [Conventional Commits](https://www.conventionalcommits.org/) (`feat:` / `fix:` / `docs:` / `chore:` / `refactor:`, `!` for breaking), and releases are cut by `/publish-release` with a CLI merge from `develop` to `main` (never GitHub's merge button).
 
-| Prefix | Use |
-|--------|-----|
-| `feat:` | New feature or capability |
-| `fix:` | Bug fix |
-| `docs:` | Documentation only |
-| `test:` | Adding or updating tests |
-| `chore:` | Maintenance, dependencies, housekeeping |
-| `refactor:` | Code change that neither fixes a bug nor adds a feature |
-| `ci:` | CI/CD configuration |
+### Repo-local conventions
 
-Scopes (optional but encouraged): `feat(controller):`, `fix(crd):`, `docs(readme):`
+This repo extends the canonical commit types with:
 
-Breaking changes: append `!` — e.g. `feat(crd)!: rename budgetLimit field`.
+- `test:` — adding or updating tests
+- `ci:` — CI/CD configuration changes
 
-Keep commits atomic. One logical change per commit, one logical change per PR.
+Scopes are encouraged (optional but helpful): `feat(controller):`, `fix(crd):`, `docs(readme):`, `feat(crd)!: rename budgetLimit field`.
 
-## Development Workflow
+### Pre-push checklist
 
-1. Branch from `develop`: `git checkout -b feat/my-feature develop`
-2. Make changes
-3. Commit with conventional commit messages
-4. Run `make manifests generate fmt vet test` — all must pass
-5. Open a PR targeting `develop`
-6. CI must pass before merging
+Before pushing a PR, run:
 
-## Release Process
+```bash
+make manifests generate fmt vet test
+```
 
-> Only the repo owner publishes releases.
-
-Releases are handled by the `/publish-release` Claude Code skill:
-
-1. Bumps the version in relevant files on `develop`, commits `chore: release v<version>`
-2. Opens a PR: `develop → main`
-3. Owner approves and merges
-4. Tags `main` with the version — release pipeline fires automatically
+All must pass. CI will re-run them.
