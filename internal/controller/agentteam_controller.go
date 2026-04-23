@@ -23,6 +23,7 @@ import (
 
 	claudev1alpha1 "github.com/amcheste/claude-teams-operator/api/v1alpha1"
 	"github.com/amcheste/claude-teams-operator/internal/metrics"
+	"github.com/amcheste/claude-teams-operator/internal/webhook"
 )
 
 const (
@@ -245,6 +246,10 @@ func (r *AgentTeamReconciler) reconcileInitializing(ctx context.Context, team *c
 	team.Status.Phase = "Running"
 	setCondition(team, metav1.ConditionTrue, "Running", "Agent pods deployed")
 	r.recordEvent(team, corev1.EventTypeNormal, "Running", "Agent pods deployed")
+	_ = teamNotifier(team).SendEvent(ctx, "team.started", teamEventPayload(team, map[string]interface{}{
+		"leadModel": team.Spec.Lead.Model,
+		"teammates": len(team.Spec.Teammates),
+	}))
 	return ctrl.Result{RequeueAfter: 30 * time.Second}, r.Status().Update(ctx, team)
 }
 
@@ -270,6 +275,7 @@ func (r *AgentTeamReconciler) reconcileRunning(ctx context.Context, team *claude
 	// Update cost estimate and check budget.
 	team.Status.EstimatedCost = estimateCost(team)
 	r.exportBudgetMetrics(team)
+	r.maybeFireBudgetWarning(ctx, team)
 	if r.isBudgetExceeded(team) {
 		log.Info("Budget exceeded", "cost", team.Status.EstimatedCost)
 		if err := r.terminateAllPods(ctx, team); err != nil {
@@ -319,6 +325,7 @@ func (r *AgentTeamReconciler) reconcileRunning(ctx context.Context, team *claude
 		team.Status.Phase = "Failed"
 		setCondition(team, metav1.ConditionFalse, "AgentFailed", "One or more agent pods failed")
 		r.recordEvent(team, corev1.EventTypeWarning, "AgentFailed", "One or more agent pods failed")
+		r.fireTeammateErrorEvents(ctx, team)
 		return ctrl.Result{}, r.Status().Update(ctx, team)
 	}
 	if allDone {
@@ -359,6 +366,62 @@ func (r *AgentTeamReconciler) reconcileTerminal(ctx context.Context, team *claud
 		return ctrl.Result{}, r.Status().Update(ctx, team)
 	}
 	return ctrl.Result{}, nil
+}
+
+// fireTeammateErrorEvents emits a `teammate.error` webhook event for every
+// failed pod belonging to this team. Called once at the transition into the
+// Failed phase so events do not repeat across reconciles.
+func (r *AgentTeamReconciler) fireTeammateErrorEvents(ctx context.Context, team *claudev1alpha1.AgentTeam) {
+	n := teamNotifier(team)
+	if n == nil {
+		return
+	}
+	check := func(teammateName, podName string) {
+		pod := &corev1.Pod{}
+		if err := r.Get(ctx, types.NamespacedName{Name: podName, Namespace: team.Namespace}, pod); err != nil {
+			return
+		}
+		if pod.Status.Phase != corev1.PodFailed {
+			return
+		}
+		_ = n.SendEvent(ctx, "teammate.error", teamEventPayload(team, map[string]interface{}{
+			"teammate": teammateName,
+			"pod":      podName,
+			"reason":   pod.Status.Reason,
+			"message":  pod.Status.Message,
+		}))
+	}
+	check("lead", agentPodName(team, "lead"))
+	for _, tm := range team.Spec.Teammates {
+		check(tm.Name, agentPodName(team, tm.Name))
+	}
+}
+
+// maybeFireBudgetWarning emits the `budget.warning` webhook event the first
+// time the team's estimated cost crosses 80% of its configured limit. Uses a
+// status Condition to dedupe across reconcile passes and operator restarts.
+// No-op when no budget is set or the threshold has not been reached.
+func (r *AgentTeamReconciler) maybeFireBudgetWarning(ctx context.Context, team *claudev1alpha1.AgentTeam) {
+	if team.Spec.Lifecycle == nil || team.Spec.Lifecycle.BudgetLimit == nil {
+		return
+	}
+	if budgetWarningSent(team) {
+		return
+	}
+	var limit, current float64
+	if _, err := fmt.Sscanf(*team.Spec.Lifecycle.BudgetLimit, "%f", &limit); err != nil || limit <= 0 {
+		return
+	}
+	fmt.Sscanf(team.Status.EstimatedCost, "%f", &current) //nolint:errcheck
+	if current < 0.8*limit {
+		return
+	}
+	_ = teamNotifier(team).SendEvent(ctx, "budget.warning", teamEventPayload(team, map[string]interface{}{
+		"estimatedCost": fmt.Sprintf("%.2f", current),
+		"budgetLimit":   fmt.Sprintf("%.2f", limit),
+		"threshold":     "80%",
+	}))
+	markBudgetWarningSent(team, current, limit)
 }
 
 // exportBudgetMetrics publishes the team's current estimated cost and remaining
@@ -1137,6 +1200,57 @@ func (r *AgentTeamReconciler) terminateAllPods(ctx context.Context, team *claude
 		}
 	}
 	return nil
+}
+
+// --- Webhook Helpers ---
+
+// teamNotifier returns a webhook.Notifier built from the team's Observability
+// config, or nil if no webhook is configured. The returned *Notifier is
+// nil-safe — callers may invoke SendEvent on it unconditionally.
+func teamNotifier(team *claudev1alpha1.AgentTeam) *webhook.Notifier {
+	if team.Spec.Observability == nil || team.Spec.Observability.Webhook == nil {
+		return nil
+	}
+	w := team.Spec.Observability.Webhook
+	return webhook.NewNotifier(w.URL, w.Events)
+}
+
+// teamEventPayload builds the standard webhook envelope fields (team, namespace)
+// merged with an event-specific `data` subobject.
+func teamEventPayload(team *claudev1alpha1.AgentTeam, data map[string]interface{}) map[string]interface{} {
+	payload := map[string]interface{}{
+		"team":      team.Name,
+		"namespace": team.Namespace,
+	}
+	if data != nil {
+		payload["data"] = data
+	}
+	return payload
+}
+
+// budgetWarningSent reports whether the 80% budget warning webhook has already
+// fired for this team. Persisted in the team's Conditions so it survives
+// operator restarts.
+func budgetWarningSent(team *claudev1alpha1.AgentTeam) bool {
+	for _, c := range team.Status.Conditions {
+		if c.Type == "BudgetWarningSent" && c.Status == metav1.ConditionTrue {
+			return true
+		}
+	}
+	return false
+}
+
+// markBudgetWarningSent records that the budget warning webhook has fired so
+// subsequent reconciles do not re-fire it.
+func markBudgetWarningSent(team *claudev1alpha1.AgentTeam, cost, limit float64) {
+	now := metav1.Now()
+	team.Status.Conditions = append(team.Status.Conditions, metav1.Condition{
+		Type:               "BudgetWarningSent",
+		Status:             metav1.ConditionTrue,
+		Reason:             "ThresholdReached",
+		Message:            fmt.Sprintf("Estimated cost %.2f reached 80%% of budget limit %.2f", cost, limit),
+		LastTransitionTime: now,
+	})
 }
 
 // --- Condition Helpers ---
