@@ -16,6 +16,7 @@ import (
 
 	claudev1alpha1 "github.com/amcheste/claude-teams-operator/api/v1alpha1"
 	"github.com/amcheste/claude-teams-operator/internal/controller"
+	"github.com/amcheste/claude-teams-operator/internal/metrics"
 )
 
 var (
@@ -52,6 +53,8 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	metrics.RegisterMetrics()
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
