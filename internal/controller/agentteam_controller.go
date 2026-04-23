@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	claudev1alpha1 "github.com/amcheste/claude-teams-operator/api/v1alpha1"
+	"github.com/amcheste/claude-teams-operator/internal/metrics"
 )
 
 const (
@@ -179,6 +180,7 @@ func (r *AgentTeamReconciler) reconcilePending(ctx context.Context, team *claude
 	team.Status.StartedAt = &now
 	setCondition(team, metav1.ConditionTrue, "Initializing", "PVCs provisioned, init job started")
 	r.recordEvent(team, corev1.EventTypeNormal, "Initializing", "PVCs provisioned; init job started")
+	metrics.RecordTeamStart(team.Name, team.Namespace)
 	return ctrl.Result{RequeueAfter: 5 * time.Second}, r.Status().Update(ctx, team)
 }
 
@@ -267,6 +269,7 @@ func (r *AgentTeamReconciler) reconcileRunning(ctx context.Context, team *claude
 
 	// Update cost estimate and check budget.
 	team.Status.EstimatedCost = estimateCost(team)
+	r.exportBudgetMetrics(team)
 	if r.isBudgetExceeded(team) {
 		log.Info("Budget exceeded", "cost", team.Status.EstimatedCost)
 		if err := r.terminateAllPods(ctx, team); err != nil {
@@ -348,12 +351,46 @@ func (r *AgentTeamReconciler) reconcileTerminal(ctx context.Context, team *claud
 		return ctrl.Result{}, err
 	}
 
+	r.recordTerminalMetrics(team)
+
 	if team.Status.CompletedAt == nil {
 		now := metav1.Now()
 		team.Status.CompletedAt = &now
 		return ctrl.Result{}, r.Status().Update(ctx, team)
 	}
 	return ctrl.Result{}, nil
+}
+
+// exportBudgetMetrics publishes the team's current estimated cost and remaining
+// budget to Prometheus. Called on each reconcileRunning pass after the cost
+// estimate has been updated.
+func (r *AgentTeamReconciler) exportBudgetMetrics(team *claudev1alpha1.AgentTeam) {
+	var current float64
+	fmt.Sscanf(team.Status.EstimatedCost, "%f", &current) //nolint:errcheck
+	metrics.RecordCost(team.Name, team.Namespace, current)
+
+	if team.Spec.Lifecycle == nil || team.Spec.Lifecycle.BudgetLimit == nil {
+		return
+	}
+	var limit float64
+	if _, err := fmt.Sscanf(*team.Spec.Lifecycle.BudgetLimit, "%f", &limit); err != nil {
+		return
+	}
+	metrics.SetBudgetRemaining(team.Name, team.Namespace, limit-current)
+}
+
+// recordTerminalMetrics records the team's outcome in Prometheus. Idempotent:
+// safe to call on every terminal reconcile pass.
+func (r *AgentTeamReconciler) recordTerminalMetrics(team *claudev1alpha1.AgentTeam) {
+	if team.Status.Phase == "Completed" {
+		var duration float64
+		if team.Status.StartedAt != nil {
+			duration = time.Since(team.Status.StartedAt.Time).Seconds()
+		}
+		metrics.RecordTeamComplete(team.Name, team.Namespace, duration)
+		return
+	}
+	metrics.RecordTeamFailed(team.Name, team.Namespace)
 }
 
 // --- PVC Management ---
