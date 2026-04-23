@@ -38,9 +38,32 @@ metrics:
   enabled: true
   port: 8080
   serviceMonitor:
+    # Set to true when kube-prometheus-stack (or another Prometheus Operator
+    # install) is present. Requires the monitoring.coreos.com CRDs.
     enabled: false
+    # Namespace to install the ServiceMonitor into. Defaults to the release
+    # namespace. Set to the Prometheus namespace when using a namespace-scoped
+    # ServiceMonitor selector.
     namespace: ""
     interval: 30s
+    # Extra labels applied to the ServiceMonitor. Use this to match the label
+    # selector on your Prometheus CR (e.g. release: kube-prometheus-stack).
+    additionalLabels: {}
+  grafanaDashboard:
+    # Renders a ConfigMap containing a Grafana dashboard JSON for Claude team
+    # observability. With the stock kube-prometheus-stack, the Grafana sidecar
+    # auto-imports any ConfigMap carrying `grafana_dashboard: "1"`.
+    enabled: false
+    # Namespace to install the dashboard ConfigMap into. Defaults to the
+    # release namespace. Many setups require this to match the Grafana
+    # namespace so the sidecar picks it up.
+    namespace: ""
+    # Label the Grafana sidecar watches for. Stock kube-prometheus-stack uses
+    # `grafana_dashboard`. Set to "" to disable the sidecar label entirely.
+    sidecarLabel: "grafana_dashboard"
+    sidecarLabelValue: "1"
+    # Extra labels applied to the ConfigMap.
+    additionalLabels: {}
 
 # Health probes
 healthProbe:
