@@ -592,7 +592,10 @@ func TestIsBudgetExceeded_OverBudget(t *testing.T) {
 	budget := "1.00"
 	team := minimalTeam("b")
 	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{BudgetLimit: &budget}
-	team.Status.EstimatedCost = "1.50"
+	// Team total under the budget package heuristic is $0.60/min (opus +
+	// sonnet). 3 minutes elapsed → $1.80, comfortably over the $1.00 limit.
+	start := metav1.NewTime(time.Now().Add(-3 * time.Minute))
+	team.Status.StartedAt = &start
 	assert.True(t, newReconciler(team).isBudgetExceeded(team))
 }
 
