@@ -121,6 +121,7 @@ helm-uninstall: ## Uninstall Helm release
 ##@ Testing
 
 ENVTEST_K8S_VERSION ?= 1.31
+ENVTEST_VERSION ?= release-0.23
 SETUP_ENVTEST = $(shell go env GOPATH)/bin/setup-envtest
 
 .PHONY: test-integration
@@ -161,7 +162,7 @@ e2e-down: ## Tear down Kind E2E cluster
 
 .PHONY: envtest
 envtest: ## Install setup-envtest
-	@test -f $(SETUP_ENVTEST) || go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+	@test -f $(SETUP_ENVTEST) || go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(ENVTEST_VERSION)
 
 ##@ Tools
 
