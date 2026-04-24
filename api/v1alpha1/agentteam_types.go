@@ -311,6 +311,20 @@ type LifecycleSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// +optional
 	MaxRestarts *int32 `json:"maxRestarts,omitempty"`
+
+	// GitHubTokenSecret names a Secret in the team's namespace carrying a
+	// GitHub token under the key GITHUB_TOKEN. Used by OnComplete=create-pr
+	// (and OnComplete=push-branch, once implemented) to authenticate against
+	// the GitHub REST API.
+	// +optional
+	GitHubTokenSecret string `json:"githubTokenSecret,omitempty"`
+
+	// PRTitleTemplate overrides the title template used by OnComplete=create-pr.
+	// Available variables: .TeamName, .Namespace. When empty, falls back to
+	// Spec.Lifecycle.PullRequest.TitleTemplate, then to the default
+	// "claude-teams: {{.TeamName}}".
+	// +optional
+	PRTitleTemplate string `json:"prTitleTemplate,omitempty"`
 }
 
 // PullRequestSpec configures automatic PR creation.

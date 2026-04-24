@@ -1560,16 +1560,18 @@ func TestExecuteOnComplete_NotifyWithoutObservability_NoOp(t *testing.T) {
 		"OnComplete=notify with no Observability must be a silent no-op")
 }
 
-// TestExecuteOnComplete_CreatePR_StubReturnsNil covers the "create-pr" log-only
-// stub. Until #4/#7 land the real implementation, this branch must just log
-// and return nil so the team still finishes cleanly.
-func TestExecuteOnComplete_CreatePR_StubReturnsNil(t *testing.T) {
+// TestExecuteOnComplete_CreatePR_MissingRepoErrors — a team configured with
+// OnComplete=create-pr but no repository URL must surface the configuration
+// error. The reconcileRunning caller swallows the error so the team still
+// finishes, but the operator logs it and emits a PRCreationFailed event.
+func TestExecuteOnComplete_CreatePR_MissingRepoErrors(t *testing.T) {
 	team := minimalTeam("create-pr-team")
 	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{OnComplete: "create-pr"}
 
 	r := newReconciler(team)
-	assert.NoError(t, r.executeOnComplete(context.Background(), team),
-		"create-pr stub must return nil so completion isn't blocked")
+	err := r.executeOnComplete(context.Background(), team)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "repository.url")
 }
 
 // TestExecuteOnComplete_PushBranch_StubReturnsNil covers the "push-branch"
