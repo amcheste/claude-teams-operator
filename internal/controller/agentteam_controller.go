@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"text/template"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -24,6 +25,7 @@ import (
 
 	claudev1alpha1 "github.com/amcheste/claude-teams-operator/api/v1alpha1"
 	"github.com/amcheste/claude-teams-operator/internal/budget"
+	"github.com/amcheste/claude-teams-operator/internal/github"
 	"github.com/amcheste/claude-teams-operator/internal/metrics"
 	"github.com/amcheste/claude-teams-operator/internal/webhook"
 )
@@ -59,6 +61,12 @@ type AgentTeamReconciler struct {
 	// Defaults to ReadWriteMany (requires NFS/EFS). Set to ReadWriteOnce for
 	// single-node clusters such as Kind where all pods share the same node.
 	PVCAccessMode corev1.PersistentVolumeAccessMode
+
+	// GitHubBaseURL overrides the GitHub REST API base URL used for
+	// OnComplete=create-pr. Empty means production (https://api.github.com).
+	// Primarily a test seam; a production deployment that needs GitHub
+	// Enterprise can set this to the Enterprise API URL.
+	GitHubBaseURL string
 
 	// Recorder emits Kubernetes Events against AgentTeam objects. Populated by
 	// SetupWithManager. Tests may inject a fake recorder directly. The
@@ -1253,11 +1261,182 @@ func (r *AgentTeamReconciler) executeOnComplete(ctx context.Context, team *claud
 			return r.sendWebhookEvent(ctx, team.Spec.Observability.Webhook.URL, "completed", team)
 		}
 	case "create-pr":
-		log.Info("TODO: create PR via gh CLI or GitHub API")
+		if err := r.executeCreatePR(ctx, team); err != nil {
+			log.Error(err, "create-pr failed")
+			r.recordEvent(team, corev1.EventTypeWarning, "PRCreationFailed", err.Error())
+			return err
+		}
 	case "push-branch":
 		log.Info("TODO: push consolidated branch")
 	}
 	return nil
+}
+
+// --- Pull Request Creation ---
+
+const (
+	defaultPRTitleTemplate = "claude-teams: {{.TeamName}}"
+	defaultBaseBranch      = "main"
+)
+
+// executeCreatePR opens a GitHub pull request for a completed coding team.
+// Requires spec.repository.url (to parse owner/repo) and
+// spec.lifecycle.githubTokenSecret (to authenticate). Reviewers and labels
+// from spec.lifecycle.pullRequest are applied best-effort; failures there
+// are logged but do not fail the overall operation — the PR already exists.
+//
+// Writes the created PR's URL and state into status.pullRequest. Safe to
+// call repeatedly; a PR that already exists does not re-trigger the
+// HTTP request because executeOnComplete only runs once per team.
+func (r *AgentTeamReconciler) executeCreatePR(ctx context.Context, team *claudev1alpha1.AgentTeam) error {
+	log := log.FromContext(ctx)
+
+	if team.Spec.Repository == nil || team.Spec.Repository.URL == "" {
+		return fmt.Errorf("create-pr requires spec.repository.url")
+	}
+	if team.Spec.Lifecycle == nil || team.Spec.Lifecycle.GitHubTokenSecret == "" {
+		return fmt.Errorf("create-pr requires spec.lifecycle.githubTokenSecret")
+	}
+
+	owner, repo, err := github.ParseRepo(team.Spec.Repository.URL)
+	if err != nil {
+		return fmt.Errorf("parsing repo URL: %w", err)
+	}
+
+	token, err := r.readGitHubToken(ctx, team)
+	if err != nil {
+		return err
+	}
+
+	title, err := renderPRTitle(team)
+	if err != nil {
+		return fmt.Errorf("rendering PR title: %w", err)
+	}
+	body := buildPRBody(team)
+
+	head, base := prBranches(team)
+	var clientOpts []github.Option
+	if r.GitHubBaseURL != "" {
+		clientOpts = append(clientOpts, github.WithBaseURL(r.GitHubBaseURL))
+	}
+	client := github.NewClient(token, clientOpts...)
+	pr, err := client.CreatePullRequest(ctx, owner, repo, &github.PullRequestRequest{
+		Title: title,
+		Body:  body,
+		Head:  head,
+		Base:  base,
+	})
+	if err != nil {
+		return fmt.Errorf("creating pull request: %w", err)
+	}
+
+	team.Status.PullRequest = &claudev1alpha1.PullRequestStatus{
+		URL:   pr.HTMLURL,
+		State: pr.State,
+	}
+	r.recordEvent(team, corev1.EventTypeNormal, "PullRequestCreated", "Opened PR %s", pr.HTMLURL)
+	log.Info("Pull request created", "url", pr.HTMLURL, "number", pr.Number)
+
+	// Reviewers + labels are nice-to-haves: if the token cannot modify them
+	// (e.g. missing scopes on a read-write-to-pulls-only PAT), the PR is
+	// still useful. Log the error and keep going.
+	if prSpec := team.Spec.Lifecycle.PullRequest; prSpec != nil {
+		if err := client.RequestReviewers(ctx, owner, repo, pr.Number, prSpec.Reviewers); err != nil {
+			log.Error(err, "requesting reviewers", "reviewers", prSpec.Reviewers)
+		}
+		if err := client.AddLabels(ctx, owner, repo, pr.Number, prSpec.Labels); err != nil {
+			log.Error(err, "adding labels", "labels", prSpec.Labels)
+		}
+	}
+	return nil
+}
+
+// readGitHubToken loads the GitHub token from the configured Secret. The
+// Secret must have a key named GITHUB_TOKEN.
+func (r *AgentTeamReconciler) readGitHubToken(ctx context.Context, team *claudev1alpha1.AgentTeam) (string, error) {
+	name := team.Spec.Lifecycle.GitHubTokenSecret
+	secret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: team.Namespace}, secret); err != nil {
+		return "", fmt.Errorf("reading GitHub token secret %s: %w", name, err)
+	}
+	token, ok := secret.Data["GITHUB_TOKEN"]
+	if !ok || len(token) == 0 {
+		return "", fmt.Errorf("secret %s is missing key GITHUB_TOKEN", name)
+	}
+	return strings.TrimSpace(string(token)), nil
+}
+
+// renderPRTitle resolves the PR title template. Precedence:
+// Lifecycle.PRTitleTemplate > Lifecycle.PullRequest.TitleTemplate > default.
+func renderPRTitle(team *claudev1alpha1.AgentTeam) (string, error) {
+	tmpl := defaultPRTitleTemplate
+	if team.Spec.Lifecycle != nil {
+		if team.Spec.Lifecycle.PRTitleTemplate != "" {
+			tmpl = team.Spec.Lifecycle.PRTitleTemplate
+		} else if team.Spec.Lifecycle.PullRequest != nil && team.Spec.Lifecycle.PullRequest.TitleTemplate != "" {
+			tmpl = team.Spec.Lifecycle.PullRequest.TitleTemplate
+		}
+	}
+	t, err := template.New("pr-title").Parse(tmpl)
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, map[string]string{
+		"TeamName":  team.Name,
+		"Namespace": team.Namespace,
+	}); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(buf.String()), nil
+}
+
+// buildPRBody renders the PR body from the team's status. Lists completed
+// task counts and the list of teammates that contributed.
+func buildPRBody(team *claudev1alpha1.AgentTeam) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Automated pull request from Claude Agent Teams.\n\n")
+	fmt.Fprintf(&b, "**Team:** `%s/%s`\n\n", team.Namespace, team.Name)
+
+	if team.Status.Tasks != nil {
+		fmt.Fprintf(&b, "## Tasks\n\n- Completed: %d\n- Total: %d\n\n",
+			team.Status.Tasks.Completed, team.Status.Tasks.Total)
+	}
+
+	if len(team.Status.Teammates) > 0 {
+		fmt.Fprintf(&b, "## Teammates\n\n")
+		for _, tm := range team.Status.Teammates {
+			fmt.Fprintf(&b, "- `%s` — phase=%s, tasksCompleted=%d, restarts=%d\n",
+				tm.Name, tm.Phase, tm.TasksCompleted, tm.RestartCount)
+		}
+		fmt.Fprintln(&b)
+	}
+
+	if team.Status.EstimatedCost != "" {
+		fmt.Fprintf(&b, "**Estimated cost:** $%s\n\n", team.Status.EstimatedCost)
+	}
+
+	fmt.Fprintln(&b, "---")
+	fmt.Fprintln(&b, "Generated by [claude-teams-operator](https://github.com/amcheste/claude-teams-operator).")
+	return b.String()
+}
+
+// prBranches returns the head and base branches for the PR. Head defaults to
+// spec.repository.branch (the branch the agents worked on); base defaults to
+// spec.lifecycle.pullRequest.targetBranch, then "main".
+func prBranches(team *claudev1alpha1.AgentTeam) (head, base string) {
+	head = ""
+	if team.Spec.Repository != nil {
+		head = team.Spec.Repository.Branch
+	}
+	if head == "" {
+		head = defaultBaseBranch
+	}
+	base = defaultBaseBranch
+	if team.Spec.Lifecycle != nil && team.Spec.Lifecycle.PullRequest != nil && team.Spec.Lifecycle.PullRequest.TargetBranch != "" {
+		base = team.Spec.Lifecycle.PullRequest.TargetBranch
+	}
+	return head, base
 }
 
 // --- Approval Gates ---

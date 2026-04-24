@@ -235,6 +235,13 @@ spec:
                     description: BudgetLimit is the maximum API spend in USD before
                       the team is terminated (e.g. "10.00").
                     type: string
+                  githubTokenSecret:
+                    description: |-
+                      GitHubTokenSecret names a Secret in the team's namespace carrying a
+                      GitHub token under the key GITHUB_TOKEN. Used by OnComplete=create-pr
+                      (and OnComplete=push-branch, once implemented) to authenticate against
+                      the GitHub REST API.
+                    type: string
                   maxRestarts:
                     default: 3
                     description: |-
@@ -253,6 +260,13 @@ spec:
                     - push-branch
                     - notify
                     - none
+                    type: string
+                  prTitleTemplate:
+                    description: |-
+                      PRTitleTemplate overrides the title template used by OnComplete=create-pr.
+                      Available variables: .TeamName, .Namespace. When empty, falls back to
+                      Spec.Lifecycle.PullRequest.TitleTemplate, then to the default
+                      "claude-teams: {{.TeamName}}".
                     type: string
                   pullRequest:
                     description: PullRequest configures PR creation when onComplete
