@@ -766,7 +766,9 @@ func TestReconcileRunning_BudgetExceeded_TerminatesPods(t *testing.T) {
 // --- reconcileRunning: teammate failure ---
 
 func TestReconcileRunning_TeammateFailure_SetsFailedPhase(t *testing.T) {
-	// Lead is still running; a teammate pod fails. Team must move to Failed.
+	// Lead is still running; a teammate pod fails AND has already exhausted
+	// its restart budget — team must move to Failed. Re-spawn under the
+	// limit is covered in TestReconcileRunning_TeammateFailure_UnderLimit_Respawns.
 	team := minimalTeam("teammate-fail")
 	leadPod := runningPod("teammate-fail-lead", "default", "teammate-fail")
 	workerPod := failedPod("teammate-fail-worker", "default", "teammate-fail")
@@ -776,6 +778,92 @@ func TestReconcileRunning_TeammateFailure_SetsFailedPhase(t *testing.T) {
 	team = fetch(t, r, "teammate-fail")
 	team.Status.Phase = "Running"
 	team.Status.StartedAt = &startTime
+	team.Status.Teammates = []claudev1alpha1.TeammateStatus{
+		{Name: "worker", RestartCount: 3},
+	}
+	ctx := context.Background()
+
+	_, err := r.reconcileRunning(ctx, team)
+	require.NoError(t, err)
+	assert.Equal(t, "Failed", team.Status.Phase)
+}
+
+func TestReconcileRunning_TeammateFailure_UnderLimit_Respawns(t *testing.T) {
+	// Failed teammate under the restart limit is deleted and re-created
+	// rather than failing the whole team — the core #13 story.
+	team := minimalTeam("respawn-team")
+	leadPod := runningPod("respawn-team-lead", "default", "respawn-team")
+	workerPod := failedPod("respawn-team-worker", "default", "respawn-team")
+	startTime := metav1.NewTime(time.Now().Add(-1 * time.Minute))
+
+	r := newReconciler(team, leadPod, workerPod)
+	team = fetch(t, r, "respawn-team")
+	team.Status.Phase = "Running"
+	team.Status.StartedAt = &startTime
+	ctx := context.Background()
+
+	_, err := r.reconcileRunning(ctx, team)
+	require.NoError(t, err)
+
+	assert.Equal(t, "Running", team.Status.Phase)
+
+	var found bool
+	for _, st := range team.Status.Teammates {
+		if st.Name == "worker" {
+			assert.Equal(t, int32(1), st.RestartCount)
+			found = true
+		}
+	}
+	assert.True(t, found, "expected worker status with RestartCount=1")
+
+	var newPod corev1.Pod
+	require.NoError(t, r.Get(ctx, types.NamespacedName{Name: "respawn-team-worker", Namespace: "default"}, &newPod))
+	assert.NotEqual(t, corev1.PodFailed, newPod.Status.Phase, "re-spawned pod must not carry the old Failed phase")
+}
+
+func TestReconcileRunning_TeammateFailure_IncrementalRestarts(t *testing.T) {
+	// Each failed reconcile bumps RestartCount by one.
+	team := minimalTeam("incr-team")
+	leadPod := runningPod("incr-team-lead", "default", "incr-team")
+	startTime := metav1.NewTime(time.Now().Add(-1 * time.Minute))
+
+	r := newReconciler(team, leadPod, failedPod("incr-team-worker", "default", "incr-team"))
+	team = fetch(t, r, "incr-team")
+	team.Status.Phase = "Running"
+	team.Status.StartedAt = &startTime
+	team.Status.Teammates = []claudev1alpha1.TeammateStatus{
+		{Name: "worker", RestartCount: 2},
+	}
+	ctx := context.Background()
+
+	_, err := r.reconcileRunning(ctx, team)
+	require.NoError(t, err)
+
+	assert.Equal(t, "Running", team.Status.Phase)
+	for _, st := range team.Status.Teammates {
+		if st.Name == "worker" {
+			assert.Equal(t, int32(3), st.RestartCount)
+		}
+	}
+}
+
+func TestReconcileRunning_TeammateFailure_CustomMaxRestarts(t *testing.T) {
+	// Spec.Lifecycle.MaxRestarts overrides the default — a limit of 1 means
+	// a single failure after one prior restart is terminal.
+	maxR := int32(1)
+	team := minimalTeam("custom-max")
+	team.Spec.Lifecycle = &claudev1alpha1.LifecycleSpec{MaxRestarts: &maxR}
+	leadPod := runningPod("custom-max-lead", "default", "custom-max")
+	workerPod := failedPod("custom-max-worker", "default", "custom-max")
+	startTime := metav1.NewTime(time.Now().Add(-1 * time.Minute))
+
+	r := newReconciler(team, leadPod, workerPod)
+	team = fetch(t, r, "custom-max")
+	team.Status.Phase = "Running"
+	team.Status.StartedAt = &startTime
+	team.Status.Teammates = []claudev1alpha1.TeammateStatus{
+		{Name: "worker", RestartCount: 1},
+	}
 	ctx := context.Background()
 
 	_, err := r.reconcileRunning(ctx, team)
@@ -1784,32 +1872,67 @@ func TestReconcileRunning_EmitsCompletedEvent(t *testing.T) {
 	assert.True(t, found, "expected a Normal Completed event, got: %v", events)
 }
 
-// TestReconcileRunning_EmitsWarningOnAgentFailure verifies a failed teammate
-// pod triggers a Warning AgentFailed event.
-func TestReconcileRunning_EmitsWarningOnAgentFailure(t *testing.T) {
-	team := minimalTeam("evt-fail")
+// TestReconcileRunning_EmitsWarningOnRestart verifies a teammate pod failure
+// under the restart limit emits a Warning TeammateRestarted event.
+func TestReconcileRunning_EmitsWarningOnRestart(t *testing.T) {
+	team := minimalTeam("evt-restart")
 	startTime := metav1.NewTime(time.Now().Add(-1 * time.Minute))
 	team.Status.Phase = "Running"
 	team.Status.StartedAt = &startTime
-	leadPod := runningPod("evt-fail-lead", "default", "evt-fail")
-	workerPod := failedPod("evt-fail-worker", "default", "evt-fail")
+	leadPod := runningPod("evt-restart-lead", "default", "evt-restart")
+	workerPod := failedPod("evt-restart-worker", "default", "evt-restart")
 	r := newReconciler(team, leadPod, workerPod)
 	recorder := record.NewFakeRecorder(8)
 	r.Recorder = recorder
 	ctx := context.Background()
 
-	_, err := r.reconcileRunning(ctx, fetch(t, r, "evt-fail"))
+	_, err := r.reconcileRunning(ctx, fetch(t, r, "evt-restart"))
 	require.NoError(t, err)
 
 	events := drainFakeRecorder(recorder)
 	found := false
 	for _, e := range events {
-		if strings.Contains(e, "Warning") && strings.Contains(e, "AgentFailed") {
+		if strings.Contains(e, "Warning") && strings.Contains(e, "TeammateRestarted") {
 			found = true
 			break
 		}
 	}
-	assert.True(t, found, "expected a Warning AgentFailed event, got: %v", events)
+	assert.True(t, found, "expected a Warning TeammateRestarted event, got: %v", events)
+}
+
+// TestReconcileRunning_EmitsWarningOnRestartLimitExceeded verifies the team
+// emits a Warning RestartLimitExceeded event when a teammate exhausts its
+// restart budget.
+func TestReconcileRunning_EmitsWarningOnRestartLimitExceeded(t *testing.T) {
+	team := minimalTeam("evt-exceed")
+	startTime := metav1.NewTime(time.Now().Add(-1 * time.Minute))
+	team.Status.Phase = "Running"
+	team.Status.StartedAt = &startTime
+	leadPod := runningPod("evt-exceed-lead", "default", "evt-exceed")
+	workerPod := failedPod("evt-exceed-worker", "default", "evt-exceed")
+	r := newReconciler(team, leadPod, workerPod)
+	fetched := fetch(t, r, "evt-exceed")
+	fetched.Status.Phase = "Running"
+	fetched.Status.StartedAt = &startTime
+	fetched.Status.Teammates = []claudev1alpha1.TeammateStatus{
+		{Name: "worker", RestartCount: 3},
+	}
+	recorder := record.NewFakeRecorder(8)
+	r.Recorder = recorder
+	ctx := context.Background()
+
+	_, err := r.reconcileRunning(ctx, fetched)
+	require.NoError(t, err)
+
+	events := drainFakeRecorder(recorder)
+	found := false
+	for _, e := range events {
+		if strings.Contains(e, "Warning") && strings.Contains(e, "RestartLimitExceeded") {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected a Warning RestartLimitExceeded event, got: %v", events)
 }
 
 // TestRecordEvent_NilRecorderIsNoop verifies recordEvent is safe with a nil

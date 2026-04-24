@@ -125,6 +125,15 @@ spec:
                     description: BudgetLimit is the maximum API spend in USD before
                       the team is terminated (e.g. "10.00").
                     type: string
+                  maxRestarts:
+                    default: 3
+                    description: |-
+                      MaxRestarts bounds how many times each teammate pod may be re-spawned
+                      after a Failed phase before the team itself is marked Failed. The lead
+                      pod is not subject to this limit — a lead crash always fails the team.
+                    format: int32
+                    minimum: 0
+                    type: integer
                   onComplete:
                     default: notify
                     description: OnComplete determines what happens when the team

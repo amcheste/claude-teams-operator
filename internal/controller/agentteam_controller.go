@@ -290,6 +290,20 @@ func (r *AgentTeamReconciler) reconcileRunning(ctx context.Context, team *claude
 	// Sync pod statuses into team.Status.
 	r.syncPodStatuses(ctx, team)
 
+	// Re-spawn crashed teammates whose RestartCount is still below the limit;
+	// fail the team if any teammate has exhausted its restarts.
+	if fatal, err := r.handleTeammateFailures(ctx, team); err != nil {
+		return ctrl.Result{}, err
+	} else if fatal != "" {
+		team.Status.Phase = "Failed"
+		setCondition(team, metav1.ConditionFalse, "RestartLimitExceeded",
+			fmt.Sprintf("Teammate %s exceeded maxRestarts=%d", fatal, maxRestarts(team)))
+		r.recordEvent(team, corev1.EventTypeWarning, "RestartLimitExceeded",
+			"Teammate %s exceeded maxRestarts=%d; all pods terminated", fatal, maxRestarts(team))
+		r.fireTeammateErrorEvents(ctx, team)
+		return ctrl.Result{}, r.Status().Update(ctx, team)
+	}
+
 	// Spawn any newly unblocked or newly approved teammates.
 	for _, tm := range team.Spec.Teammates {
 		podName := agentPodName(team, tm.Name)
@@ -366,6 +380,102 @@ func (r *AgentTeamReconciler) reconcileTerminal(ctx context.Context, team *claud
 		return ctrl.Result{}, r.Status().Update(ctx, team)
 	}
 	return ctrl.Result{}, nil
+}
+
+const defaultMaxRestarts int32 = 3
+
+// maxRestarts returns the team's configured maxRestarts limit, falling back to
+// the default when unset.
+func maxRestarts(team *claudev1alpha1.AgentTeam) int32 {
+	if team.Spec.Lifecycle == nil || team.Spec.Lifecycle.MaxRestarts == nil {
+		return defaultMaxRestarts
+	}
+	return *team.Spec.Lifecycle.MaxRestarts
+}
+
+// teammateRestartCount returns the RestartCount recorded for a teammate, or 0
+// if the teammate has no status entry yet.
+func teammateRestartCount(team *claudev1alpha1.AgentTeam, name string) int32 {
+	for _, st := range team.Status.Teammates {
+		if st.Name == name {
+			return st.RestartCount
+		}
+	}
+	return 0
+}
+
+// setTeammateRestartCount updates the RestartCount on a teammate's status
+// entry in-place. The caller is responsible for persisting the team via
+// Status().Update.
+func setTeammateRestartCount(team *claudev1alpha1.AgentTeam, name string, count int32) {
+	for i, st := range team.Status.Teammates {
+		if st.Name == name {
+			team.Status.Teammates[i].RestartCount = count
+			return
+		}
+	}
+}
+
+// handleTeammateFailures inspects teammate pods for the Failed phase and
+// either re-spawns them (when RestartCount < maxRestarts) or reports the
+// first teammate that has exhausted its restarts. Returns the exhausted
+// teammate's name (or "" when everything is fine) so the caller can transition
+// the team to Failed with a meaningful condition message.
+//
+// Re-spawning a teammate bumps its RestartCount, fires a teammate.error
+// webhook event with restart metadata, and increments the
+// claude_teammate_restarts_total metric. The newly-spawned pod starts in
+// Pending; the next reconcile will resume normal flow once it's Running.
+func (r *AgentTeamReconciler) handleTeammateFailures(ctx context.Context, team *claudev1alpha1.AgentTeam) (fatalTeammate string, err error) {
+	log := log.FromContext(ctx)
+	limit := maxRestarts(team)
+	notifier := teamNotifier(team)
+
+	for _, tm := range team.Spec.Teammates {
+		podName := agentPodName(team, tm.Name)
+		pod := &corev1.Pod{}
+		if err := r.Get(ctx, types.NamespacedName{Name: podName, Namespace: team.Namespace}, pod); err != nil {
+			if errors.IsNotFound(err) {
+				continue
+			}
+			return "", err
+		}
+		if pod.Status.Phase != corev1.PodFailed {
+			continue
+		}
+
+		currentCount := teammateRestartCount(team, tm.Name)
+		if currentCount >= limit {
+			return tm.Name, nil
+		}
+
+		log.Info("Re-spawning crashed teammate", "name", tm.Name, "restart", currentCount+1, "limit", limit)
+		if err := r.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
+			return "", fmt.Errorf("deleting failed pod %s: %w", podName, err)
+		}
+
+		newCount := currentCount + 1
+		setTeammateRestartCount(team, tm.Name, newCount)
+		metrics.RecordTeammateRestart(team.Name, tm.Name)
+		_ = notifier.SendEvent(ctx, "teammate.error", teamEventPayload(team, map[string]interface{}{
+			"teammate":     tm.Name,
+			"pod":          pod.Name,
+			"reason":       pod.Status.Reason,
+			"message":      pod.Status.Message,
+			"restartCount": int64(newCount),
+			"maxRestarts":  int64(limit),
+			"action":       "respawn",
+		}))
+		r.recordEvent(team, corev1.EventTypeWarning, "TeammateRestarted",
+			"Teammate %s re-spawned after pod failure (restart %d/%d)", tm.Name, newCount, limit)
+
+		if err := r.ensureAgentPod(ctx, team, tm.Name, tm.Model, tm.Prompt,
+			"auto-accept", false, tm.Resources, tm.Scope,
+			tm.Skills, tm.MCPServers); err != nil {
+			return "", fmt.Errorf("re-spawning teammate %s: %w", tm.Name, err)
+		}
+	}
+	return "", nil
 }
 
 // fireTeammateErrorEvents emits a `teammate.error` webhook event for every
