@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	claudev1alpha1 "github.com/amcheste/claude-teams-operator/api/v1alpha1"
+	"github.com/amcheste/claude-teams-operator/internal/budget"
 	"github.com/amcheste/claude-teams-operator/internal/metrics"
 	"github.com/amcheste/claude-teams-operator/internal/webhook"
 )
@@ -518,11 +519,11 @@ func (r *AgentTeamReconciler) maybeFireBudgetWarning(ctx context.Context, team *
 	if budgetWarningSent(team) {
 		return
 	}
-	var limit, current float64
+	var limit float64
 	if _, err := fmt.Sscanf(*team.Spec.Lifecycle.BudgetLimit, "%f", &limit); err != nil || limit <= 0 {
 		return
 	}
-	fmt.Sscanf(team.Status.EstimatedCost, "%f", &current) //nolint:errcheck
+	current := newTeamTracker(team).GetTotalCost()
 	if current < 0.8*limit {
 		return
 	}
@@ -538,8 +539,8 @@ func (r *AgentTeamReconciler) maybeFireBudgetWarning(ctx context.Context, team *
 // budget to Prometheus. Called on each reconcileRunning pass after the cost
 // estimate has been updated.
 func (r *AgentTeamReconciler) exportBudgetMetrics(team *claudev1alpha1.AgentTeam) {
-	var current float64
-	fmt.Sscanf(team.Status.EstimatedCost, "%f", &current) //nolint:errcheck
+	tracker := newTeamTracker(team)
+	current := tracker.GetTotalCost()
 	metrics.RecordCost(team.Name, team.Namespace, current)
 
 	if team.Spec.Lifecycle == nil || team.Spec.Lifecycle.BudgetLimit == nil {
@@ -1260,35 +1261,36 @@ func (r *AgentTeamReconciler) isBudgetExceeded(team *claudev1alpha1.AgentTeam) b
 	if team.Spec.Lifecycle == nil || team.Spec.Lifecycle.BudgetLimit == nil {
 		return false
 	}
-	var limit, current float64
-	if _, err := fmt.Sscanf(*team.Spec.Lifecycle.BudgetLimit, "%f", &limit); err != nil {
-		return false
-	}
-	fmt.Sscanf(team.Status.EstimatedCost, "%f", &current) //nolint:errcheck
-	return current >= limit
+	return newTeamTracker(team).IsOverBudget()
 }
 
-// estimateCost returns a rough USD estimate based on elapsed time and model type.
-// Assumes ~1500 tokens/min for opus ($15/M), ~3000 tokens/min for sonnet ($3/M).
+// estimateCost returns the team's current USD cost estimate, formatted for
+// Status.EstimatedCost display. Delegates to the budget package so rates and
+// heuristics live in one place.
 func estimateCost(team *claudev1alpha1.AgentTeam) string {
-	if team.Status.StartedAt == nil {
-		return "0.00"
-	}
-	elapsed := time.Since(team.Status.StartedAt.Time).Minutes()
-	total := estimateModelCost(team.Spec.Lead.Model, elapsed)
-	for _, tm := range team.Spec.Teammates {
-		total += estimateModelCost(tm.Model, elapsed)
-	}
-	return fmt.Sprintf("%.2f", total)
+	return fmt.Sprintf("%.2f", newTeamTracker(team).GetTotalCost())
 }
 
-func estimateModelCost(model string, elapsedMinutes float64) float64 {
-	switch model {
-	case "opus":
-		return elapsedMinutes * 1500 / 1_000_000 * 15
-	default:
-		return elapsedMinutes * 3000 / 1_000_000 * 3
+// newTeamTracker builds a budget Tracker seeded with one session per agent
+// (lead + teammates) covering the wall-clock time elapsed since the team
+// started. The tracker's limit comes from Spec.Lifecycle.BudgetLimit so a
+// single tracker can answer both "how much has been spent" and "are we
+// over-budget" without a second parse of the limit string.
+func newTeamTracker(team *claudev1alpha1.AgentTeam) *budget.Tracker {
+	var limit float64
+	if team.Spec.Lifecycle != nil && team.Spec.Lifecycle.BudgetLimit != nil {
+		fmt.Sscanf(*team.Spec.Lifecycle.BudgetLimit, "%f", &limit) //nolint:errcheck
 	}
+	tracker := budget.NewTracker(limit)
+	if team.Status.StartedAt == nil {
+		return tracker
+	}
+	elapsedSec := int64(time.Since(team.Status.StartedAt.Time).Seconds())
+	tracker.RecordSession(team.Spec.Lead.Model, elapsedSec)
+	for _, tm := range team.Spec.Teammates {
+		tracker.RecordSession(tm.Model, elapsedSec)
+	}
+	return tracker
 }
 
 // --- Pod Cleanup ---

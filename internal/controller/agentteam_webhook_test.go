@@ -86,13 +86,13 @@ func TestReconcileInitializing_FiresTeamStartedWebhook(t *testing.T) {
 func TestReconcileRunning_FiresBudgetWarningAt80Percent(t *testing.T) {
 	url, events := webhookCaptureServer(t)
 
-	// estimateCost for minimalTeam (opus lead + sonnet worker) is ~$0.0315/min.
-	// At 5h elapsed that's ~$9.45 — 94.5% of a $10 budget, safely in the
-	// [80%, 100%) window so warning fires without the exceeded branch
-	// pre-empting the reconcile.
+	// Under the budget package heuristic, minimalTeam (opus lead + sonnet
+	// worker) runs at $0.60/min. At 15m elapsed that's $9.00 — 90% of a $10
+	// budget, safely in the [80%, 100%) window so the warning fires without
+	// the exceeded branch pre-empting the reconcile.
 	team := withWebhook(withLifecycle(minimalTeam("wh-budget"), "24h", "10.00"), url, []string{"budget.warning"})
 	team.Status.Phase = "Running"
-	start := metav1.NewTime(time.Now().Add(-5 * time.Hour))
+	start := metav1.NewTime(time.Now().Add(-15 * time.Minute))
 	team.Status.StartedAt = &start
 
 	r := newReconciler(team)
@@ -118,7 +118,7 @@ func TestReconcileRunning_BudgetWarningFiresOnlyOnce(t *testing.T) {
 
 	team := withWebhook(withLifecycle(minimalTeam("wh-budget-dedup"), "24h", "10.00"), url, []string{"budget.warning"})
 	team.Status.Phase = "Running"
-	start := metav1.NewTime(time.Now().Add(-5 * time.Hour))
+	start := metav1.NewTime(time.Now().Add(-15 * time.Minute))
 	team.Status.StartedAt = &start
 
 	r := newReconciler(team)
