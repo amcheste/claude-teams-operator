@@ -1,11 +1,13 @@
 name: Acceptance Tests
 
-# Runs on PRs from develop → main (the release gate) and on demand.
-# Purpose: spin up a real Kind cluster, deploy the operator, and exercise the
-# full AgentTeam lifecycle before any code lands on main.
+# Runs on PRs from develop → main (the release gate), on tag releases (called
+# from release.yml), and on demand. Purpose: spin up a real Kind cluster,
+# deploy the operator, and exercise the full AgentTeam lifecycle before any
+# code lands on main — or any tagged artifact ships to users.
 on:
   pull_request:
     branches: [main]
+  workflow_call:
   workflow_dispatch:
 
 permissions:
