@@ -325,6 +325,21 @@ type LifecycleSpec struct {
 	// "claude-teams: {{.TeamName}}".
 	// +optional
 	PRTitleTemplate string `json:"prTitleTemplate,omitempty"`
+
+	// GitCredentialsSecret names a Secret in the team's namespace carrying git
+	// push credentials. The Secret must contain either 'ssh-privatekey' or
+	// 'token'. Used by OnComplete=push-branch (and OnComplete=create-pr when
+	// push-branch runs ahead of it). Falls back to Spec.Repository.CredentialsSecret
+	// when unset, so teams that already configured clone credentials with push
+	// scope don't need to duplicate.
+	// +optional
+	GitCredentialsSecret string `json:"gitCredentialsSecret,omitempty"`
+
+	// ConsolidatedBranchTemplate is a Go template rendered to produce the
+	// branch name pushed by OnComplete=push-branch. Available variables:
+	// .TeamName, .Namespace. When empty, defaults to "teams/{{.TeamName}}".
+	// +optional
+	ConsolidatedBranchTemplate string `json:"consolidatedBranchTemplate,omitempty"`
 }
 
 // PullRequestSpec configures automatic PR creation.
@@ -437,6 +452,12 @@ type AgentTeamStatus struct {
 	// PullRequest reports PR creation status.
 	// +optional
 	PullRequest *PullRequestStatus `json:"pullRequest,omitempty"`
+
+	// ConsolidatedBranch is the branch name pushed by OnComplete=push-branch.
+	// Populated once the push-branch Job succeeds; OnComplete=create-pr reads
+	// this as the PR head branch when set, in place of Spec.Repository.Branch.
+	// +optional
+	ConsolidatedBranch string `json:"consolidatedBranch,omitempty"`
 
 	// Conditions represent the latest available observations.
 	// +optional

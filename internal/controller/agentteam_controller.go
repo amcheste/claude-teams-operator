@@ -356,10 +356,30 @@ func (r *AgentTeamReconciler) reconcileRunning(ctx context.Context, team *claude
 		return ctrl.Result{}, r.Status().Update(ctx, team)
 	}
 	if allDone {
-		log.Info("All agents complete, running onComplete")
+		log.Info("All agents complete, running finalization")
+		ready, err := r.runFinalization(ctx, team)
+		if err != nil {
+			// Hard failure during finalization (e.g. push-branch Job exceeded
+			// its backoff limit). Mark the team Failed so the terminal phase
+			// cleans up.
+			team.Status.Phase = "Failed"
+			setCondition(team, metav1.ConditionFalse, "FinalizationFailed", err.Error())
+			r.recordEvent(team, corev1.EventTypeWarning, "FinalizationFailed", "%v", err)
+			return ctrl.Result{}, r.Status().Update(ctx, team)
+		}
+		if !ready {
+			// Async finalization work still in flight — keep the team in
+			// Running and requeue so the next pass checks the Job status.
+			setCondition(team, metav1.ConditionTrue, "Finalizing", "Waiting on finalization Job")
+			if err := r.Status().Update(ctx, team); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
 		if err := r.executeOnComplete(ctx, team); err != nil {
 			log.Error(err, "OnComplete action failed")
-			// Don't fail the team for post-completion actions.
+			// Don't fail the team for post-completion actions beyond
+			// finalization (e.g. create-pr API errors are logged, not fatal).
 		}
 		team.Status.Phase = "Completed"
 		setCondition(team, metav1.ConditionFalse, "Completed", "All agents finished successfully")
@@ -717,6 +737,162 @@ echo "[init] Done"
 		return err
 	}
 	return r.Create(ctx, job)
+}
+
+// ensurePushBranchJob creates the Job that consolidates teammate worktree
+// branches into a single branch and pushes it to the remote. Idempotent; a
+// pre-existing Job is left alone so reconciler passes after submission just
+// poll checkJobStatus.
+//
+// The script merges each `teammate-<name>` branch (init Job's naming
+// convention) into a fresh branch rooted at spec.repository.branch, then
+// pushes over HTTPS with the token from the credentials Secret embedded in
+// the origin URL.
+func (r *AgentTeamReconciler) ensurePushBranchJob(ctx context.Context, team *claudev1alpha1.AgentTeam, consolidatedBranch string) error {
+	jobName := pushBranchJobName(team)
+	job := &batchv1.Job{}
+	if err := r.Get(ctx, types.NamespacedName{Name: jobName, Namespace: team.Namespace}, job); err == nil {
+		return nil
+	} else if !errors.IsNotFound(err) {
+		return err
+	}
+
+	repo := team.Spec.Repository
+	baseBranch := repo.Branch
+	if baseBranch == "" {
+		baseBranch = "main"
+	}
+
+	teammateNames := make([]string, len(team.Spec.Teammates))
+	for i, tm := range team.Spec.Teammates {
+		teammateNames[i] = tm.Name
+	}
+
+	script := fmt.Sprintf(`
+set -eu
+cd /workspace/repo
+
+# Identity for merge commits. These are operator-generated merges; using a
+# distinct identity makes git log | grep trivially filter them.
+git config user.email "operator@claude-teams.local"
+git config user.name "claude-teams-operator"
+
+# Fresh consolidated branch rooted at the current base tip.
+git fetch origin %s
+git checkout -B %s origin/%s
+
+# Merge each teammate worktree branch. A teammate that didn't commit anything
+# produces "Already up to date." which is fine. A merge conflict fails the Job
+# — human resolution required before push.
+for TM in %s; do
+  git merge --no-ff -m "merge teammate $TM" "teammate-$TM" || {
+    echo "[push-branch] merge conflict on teammate $TM"
+    exit 1
+  }
+done
+
+# HTTPS push with token embedded when available. SSH support is a follow-up.
+if [ -n "${GIT_TOKEN:-}" ]; then
+  ORIGIN_URL="$(git remote get-url origin)"
+  case "$ORIGIN_URL" in
+    https://*)
+      PUSH_URL="$(echo "$ORIGIN_URL" | sed "s|^https://|https://${GIT_TOKEN}@|")"
+      git remote set-url origin "$PUSH_URL"
+      ;;
+  esac
+fi
+git push origin %s
+echo "[push-branch] Pushed %s"
+`,
+		baseBranch,
+		consolidatedBranch, baseBranch,
+		strings.Join(teammateNames, " "),
+		consolidatedBranch,
+		consolidatedBranch,
+	)
+
+	// Prefer lifecycle.gitCredentialsSecret, fall back to repository.credentialsSecret.
+	credSecret := ""
+	if team.Spec.Lifecycle != nil && team.Spec.Lifecycle.GitCredentialsSecret != "" {
+		credSecret = team.Spec.Lifecycle.GitCredentialsSecret
+	} else if repo.CredentialsSecret != "" {
+		credSecret = repo.CredentialsSecret
+	}
+
+	envVars := []corev1.EnvVar{}
+	if credSecret != "" {
+		envVars = append(envVars, corev1.EnvVar{
+			Name: "GIT_TOKEN",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: credSecret},
+					Key:                  "token",
+					Optional:             boolPtr(true),
+				},
+			},
+		})
+	}
+
+	backoffLimit := int32(3)
+	job = &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      jobName,
+			Namespace: team.Namespace,
+		},
+		Spec: batchv1.JobSpec{
+			BackoffLimit: &backoffLimit,
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					RestartPolicy: corev1.RestartPolicyOnFailure,
+					Containers: []corev1.Container{
+						{
+							Name:    "push-branch",
+							Image:   r.initImage(),
+							Command: []string{"sh", "-c", script},
+							Env:     envVars,
+							VolumeMounts: []corev1.VolumeMount{
+								{Name: "repo", MountPath: "/workspace"},
+							},
+						},
+					},
+					Volumes: []corev1.Volume{
+						pvcVolume("repo", repoPVCName(team)),
+					},
+				},
+			},
+		},
+	}
+	if err := ctrl.SetControllerReference(team, job, r.Scheme); err != nil {
+		return err
+	}
+	return r.Create(ctx, job)
+}
+
+// renderConsolidatedBranch resolves the branch name template. Defaults to
+// "teams/{{.TeamName}}" when unset.
+func renderConsolidatedBranch(team *claudev1alpha1.AgentTeam) (string, error) {
+	tmpl := "teams/{{.TeamName}}"
+	if team.Spec.Lifecycle != nil && team.Spec.Lifecycle.ConsolidatedBranchTemplate != "" {
+		tmpl = team.Spec.Lifecycle.ConsolidatedBranchTemplate
+	}
+	t, err := template.New("consolidated-branch").Parse(tmpl)
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, map[string]string{
+		"TeamName":  team.Name,
+		"Namespace": team.Namespace,
+	}); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(buf.String()), nil
+}
+
+// pushBranchJobName returns the Job name for the push-branch consolidation.
+// Separate from initJobName so the two can coexist on the same team.
+func pushBranchJobName(team *claudev1alpha1.AgentTeam) string {
+	return team.Name + "-push-branch"
 }
 
 func (r *AgentTeamReconciler) checkJobStatus(ctx context.Context, team *claudev1alpha1.AgentTeam, jobName string) (completed, failed bool, err error) {
@@ -1250,6 +1426,61 @@ func (r *AgentTeamReconciler) allPodsComplete(ctx context.Context, team *claudev
 	return allSucceeded, false, nil
 }
 
+// runFinalization handles async post-completion work — currently just the
+// push-branch Job, which both OnComplete=push-branch and OnComplete=create-pr
+// need. Returns ready=true when there's nothing async outstanding and the
+// caller can transition to Completed; ready=false means "come back next
+// reconcile, job still running". An error means the finalization failed
+// terminally (e.g. Job backoff exhausted).
+//
+// Safe to call on every reconcile pass while allDone is true — it's a pure
+// check-and-act state machine gated on team.Status.ConsolidatedBranch and
+// the Job's status.
+func (r *AgentTeamReconciler) runFinalization(ctx context.Context, team *claudev1alpha1.AgentTeam) (ready bool, err error) {
+	log := log.FromContext(ctx)
+
+	if team.Spec.Lifecycle == nil {
+		return true, nil
+	}
+	mode := team.Spec.Lifecycle.OnComplete
+	if mode != "push-branch" && mode != "create-pr" {
+		return true, nil
+	}
+	// Both modes need a repo; without one there's nothing to consolidate.
+	if team.Spec.Repository == nil || team.Spec.Repository.URL == "" {
+		return true, nil
+	}
+	// Already finalized in a prior reconcile.
+	if team.Status.ConsolidatedBranch != "" {
+		return true, nil
+	}
+
+	branch, err := renderConsolidatedBranch(team)
+	if err != nil {
+		return false, fmt.Errorf("rendering consolidated branch: %w", err)
+	}
+
+	if err := r.ensurePushBranchJob(ctx, team, branch); err != nil {
+		return false, fmt.Errorf("ensuring push-branch Job: %w", err)
+	}
+
+	done, failed, err := r.checkJobStatus(ctx, team, pushBranchJobName(team))
+	if err != nil {
+		return false, err
+	}
+	if failed {
+		return false, fmt.Errorf("push-branch Job exceeded backoff limit")
+	}
+	if !done {
+		log.Info("push-branch Job still running", "branch", branch)
+		return false, nil
+	}
+
+	team.Status.ConsolidatedBranch = branch
+	r.recordEvent(team, corev1.EventTypeNormal, "BranchPushed", "Pushed consolidated branch %s", branch)
+	return true, nil
+}
+
 func (r *AgentTeamReconciler) executeOnComplete(ctx context.Context, team *claudev1alpha1.AgentTeam) error {
 	if team.Spec.Lifecycle == nil {
 		return nil
@@ -1267,7 +1498,16 @@ func (r *AgentTeamReconciler) executeOnComplete(ctx context.Context, team *claud
 			return err
 		}
 	case "push-branch":
-		log.Info("TODO: push consolidated branch")
+		// The actual consolidation runs in runFinalization before this
+		// function is invoked, so by the time we land here the branch is
+		// already pushed and team.Status.ConsolidatedBranch is populated.
+		// This case exists just so the enum value is terminal-ish and the
+		// log message reflects what happened.
+		if team.Status.ConsolidatedBranch == "" {
+			log.Info("push-branch: no consolidation ran (missing repo URL?)")
+		} else {
+			log.Info("push-branch: consolidated branch pushed", "branch", team.Status.ConsolidatedBranch)
+		}
 	}
 	return nil
 }
@@ -1421,12 +1661,19 @@ func buildPRBody(team *claudev1alpha1.AgentTeam) string {
 	return b.String()
 }
 
-// prBranches returns the head and base branches for the PR. Head defaults to
-// spec.repository.branch (the branch the agents worked on); base defaults to
-// spec.lifecycle.pullRequest.targetBranch, then "main".
+// prBranches returns the head and base branches for the PR.
+//
+// Head selection (in order): the consolidated branch from push-branch if
+// runFinalization wrote one, otherwise spec.repository.branch (useful for
+// single-teammate teams that committed directly to their work branch),
+// otherwise the default.
+//
+// Base: spec.lifecycle.pullRequest.targetBranch, default "main".
 func prBranches(team *claudev1alpha1.AgentTeam) (head, base string) {
 	head = ""
-	if team.Spec.Repository != nil {
+	if team.Status.ConsolidatedBranch != "" {
+		head = team.Status.ConsolidatedBranch
+	} else if team.Spec.Repository != nil {
 		head = team.Spec.Repository.Branch
 	}
 	if head == "" {
