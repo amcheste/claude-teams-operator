@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"text/template"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,6 +24,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	claudev1alpha1 "github.com/amcheste/claude-teams-operator/api/v1alpha1"
+	"github.com/amcheste/claude-teams-operator/internal/budget"
+	"github.com/amcheste/claude-teams-operator/internal/github"
+	"github.com/amcheste/claude-teams-operator/internal/metrics"
+	"github.com/amcheste/claude-teams-operator/internal/webhook"
 )
 
 const (
@@ -55,6 +61,12 @@ type AgentTeamReconciler struct {
 	// Defaults to ReadWriteMany (requires NFS/EFS). Set to ReadWriteOnce for
 	// single-node clusters such as Kind where all pods share the same node.
 	PVCAccessMode corev1.PersistentVolumeAccessMode
+
+	// GitHubBaseURL overrides the GitHub REST API base URL used for
+	// OnComplete=create-pr. Empty means production (https://api.github.com).
+	// Primarily a test seam; a production deployment that needs GitHub
+	// Enterprise can set this to the Enterprise API URL.
+	GitHubBaseURL string
 
 	// Recorder emits Kubernetes Events against AgentTeam objects. Populated by
 	// SetupWithManager. Tests may inject a fake recorder directly. The
@@ -101,7 +113,10 @@ func (r *AgentTeamReconciler) initImage() string {
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=get;list;watch;create;update;patch;delete
 
 func (r *AgentTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
@@ -179,6 +194,7 @@ func (r *AgentTeamReconciler) reconcilePending(ctx context.Context, team *claude
 	team.Status.StartedAt = &now
 	setCondition(team, metav1.ConditionTrue, "Initializing", "PVCs provisioned, init job started")
 	r.recordEvent(team, corev1.EventTypeNormal, "Initializing", "PVCs provisioned; init job started")
+	metrics.RecordTeamStart(team.Name, team.Namespace)
 	return ctrl.Result{RequeueAfter: 5 * time.Second}, r.Status().Update(ctx, team)
 }
 
@@ -243,6 +259,10 @@ func (r *AgentTeamReconciler) reconcileInitializing(ctx context.Context, team *c
 	team.Status.Phase = "Running"
 	setCondition(team, metav1.ConditionTrue, "Running", "Agent pods deployed")
 	r.recordEvent(team, corev1.EventTypeNormal, "Running", "Agent pods deployed")
+	_ = teamNotifier(team).SendEvent(ctx, "team.started", teamEventPayload(team, map[string]interface{}{
+		"leadModel": team.Spec.Lead.Model,
+		"teammates": len(team.Spec.Teammates),
+	}))
 	return ctrl.Result{RequeueAfter: 30 * time.Second}, r.Status().Update(ctx, team)
 }
 
@@ -267,6 +287,8 @@ func (r *AgentTeamReconciler) reconcileRunning(ctx context.Context, team *claude
 
 	// Update cost estimate and check budget.
 	team.Status.EstimatedCost = estimateCost(team)
+	r.exportBudgetMetrics(team)
+	r.maybeFireBudgetWarning(ctx, team)
 	if r.isBudgetExceeded(team) {
 		log.Info("Budget exceeded", "cost", team.Status.EstimatedCost)
 		if err := r.terminateAllPods(ctx, team); err != nil {
@@ -280,6 +302,20 @@ func (r *AgentTeamReconciler) reconcileRunning(ctx context.Context, team *claude
 
 	// Sync pod statuses into team.Status.
 	r.syncPodStatuses(ctx, team)
+
+	// Re-spawn crashed teammates whose RestartCount is still below the limit;
+	// fail the team if any teammate has exhausted its restarts.
+	if fatal, err := r.handleTeammateFailures(ctx, team); err != nil {
+		return ctrl.Result{}, err
+	} else if fatal != "" {
+		team.Status.Phase = "Failed"
+		setCondition(team, metav1.ConditionFalse, "RestartLimitExceeded",
+			fmt.Sprintf("Teammate %s exceeded maxRestarts=%d", fatal, maxRestarts(team)))
+		r.recordEvent(team, corev1.EventTypeWarning, "RestartLimitExceeded",
+			"Teammate %s exceeded maxRestarts=%d; all pods terminated", fatal, maxRestarts(team))
+		r.fireTeammateErrorEvents(ctx, team)
+		return ctrl.Result{}, r.Status().Update(ctx, team)
+	}
 
 	// Spawn any newly unblocked or newly approved teammates.
 	for _, tm := range team.Spec.Teammates {
@@ -316,6 +352,7 @@ func (r *AgentTeamReconciler) reconcileRunning(ctx context.Context, team *claude
 		team.Status.Phase = "Failed"
 		setCondition(team, metav1.ConditionFalse, "AgentFailed", "One or more agent pods failed")
 		r.recordEvent(team, corev1.EventTypeWarning, "AgentFailed", "One or more agent pods failed")
+		r.fireTeammateErrorEvents(ctx, team)
 		return ctrl.Result{}, r.Status().Update(ctx, team)
 	}
 	if allDone {
@@ -348,12 +385,198 @@ func (r *AgentTeamReconciler) reconcileTerminal(ctx context.Context, team *claud
 		return ctrl.Result{}, err
 	}
 
+	r.recordTerminalMetrics(team)
+
 	if team.Status.CompletedAt == nil {
 		now := metav1.Now()
 		team.Status.CompletedAt = &now
 		return ctrl.Result{}, r.Status().Update(ctx, team)
 	}
 	return ctrl.Result{}, nil
+}
+
+const defaultMaxRestarts int32 = 3
+
+// maxRestarts returns the team's configured maxRestarts limit, falling back to
+// the default when unset.
+func maxRestarts(team *claudev1alpha1.AgentTeam) int32 {
+	if team.Spec.Lifecycle == nil || team.Spec.Lifecycle.MaxRestarts == nil {
+		return defaultMaxRestarts
+	}
+	return *team.Spec.Lifecycle.MaxRestarts
+}
+
+// teammateRestartCount returns the RestartCount recorded for a teammate, or 0
+// if the teammate has no status entry yet.
+func teammateRestartCount(team *claudev1alpha1.AgentTeam, name string) int32 {
+	for _, st := range team.Status.Teammates {
+		if st.Name == name {
+			return st.RestartCount
+		}
+	}
+	return 0
+}
+
+// setTeammateRestartCount updates the RestartCount on a teammate's status
+// entry in-place. The caller is responsible for persisting the team via
+// Status().Update.
+func setTeammateRestartCount(team *claudev1alpha1.AgentTeam, name string, count int32) {
+	for i, st := range team.Status.Teammates {
+		if st.Name == name {
+			team.Status.Teammates[i].RestartCount = count
+			return
+		}
+	}
+}
+
+// handleTeammateFailures inspects teammate pods for the Failed phase and
+// either re-spawns them (when RestartCount < maxRestarts) or reports the
+// first teammate that has exhausted its restarts. Returns the exhausted
+// teammate's name (or "" when everything is fine) so the caller can transition
+// the team to Failed with a meaningful condition message.
+//
+// Re-spawning a teammate bumps its RestartCount, fires a teammate.error
+// webhook event with restart metadata, and increments the
+// claude_teammate_restarts_total metric. The newly-spawned pod starts in
+// Pending; the next reconcile will resume normal flow once it's Running.
+func (r *AgentTeamReconciler) handleTeammateFailures(ctx context.Context, team *claudev1alpha1.AgentTeam) (fatalTeammate string, err error) {
+	log := log.FromContext(ctx)
+	limit := maxRestarts(team)
+	notifier := teamNotifier(team)
+
+	for _, tm := range team.Spec.Teammates {
+		podName := agentPodName(team, tm.Name)
+		pod := &corev1.Pod{}
+		if err := r.Get(ctx, types.NamespacedName{Name: podName, Namespace: team.Namespace}, pod); err != nil {
+			if errors.IsNotFound(err) {
+				continue
+			}
+			return "", err
+		}
+		if pod.Status.Phase != corev1.PodFailed {
+			continue
+		}
+
+		currentCount := teammateRestartCount(team, tm.Name)
+		if currentCount >= limit {
+			return tm.Name, nil
+		}
+
+		log.Info("Re-spawning crashed teammate", "name", tm.Name, "restart", currentCount+1, "limit", limit)
+		if err := r.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
+			return "", fmt.Errorf("deleting failed pod %s: %w", podName, err)
+		}
+
+		newCount := currentCount + 1
+		setTeammateRestartCount(team, tm.Name, newCount)
+		metrics.RecordTeammateRestart(team.Name, tm.Name)
+		_ = notifier.SendEvent(ctx, "teammate.error", teamEventPayload(team, map[string]interface{}{
+			"teammate":     tm.Name,
+			"pod":          pod.Name,
+			"reason":       pod.Status.Reason,
+			"message":      pod.Status.Message,
+			"restartCount": int64(newCount),
+			"maxRestarts":  int64(limit),
+			"action":       "respawn",
+		}))
+		r.recordEvent(team, corev1.EventTypeWarning, "TeammateRestarted",
+			"Teammate %s re-spawned after pod failure (restart %d/%d)", tm.Name, newCount, limit)
+
+		if err := r.ensureAgentPod(ctx, team, tm.Name, tm.Model, tm.Prompt,
+			"auto-accept", false, tm.Resources, tm.Scope,
+			tm.Skills, tm.MCPServers); err != nil {
+			return "", fmt.Errorf("re-spawning teammate %s: %w", tm.Name, err)
+		}
+	}
+	return "", nil
+}
+
+// fireTeammateErrorEvents emits a `teammate.error` webhook event for every
+// failed pod belonging to this team. Called once at the transition into the
+// Failed phase so events do not repeat across reconciles.
+func (r *AgentTeamReconciler) fireTeammateErrorEvents(ctx context.Context, team *claudev1alpha1.AgentTeam) {
+	n := teamNotifier(team)
+	if n == nil {
+		return
+	}
+	check := func(teammateName, podName string) {
+		pod := &corev1.Pod{}
+		if err := r.Get(ctx, types.NamespacedName{Name: podName, Namespace: team.Namespace}, pod); err != nil {
+			return
+		}
+		if pod.Status.Phase != corev1.PodFailed {
+			return
+		}
+		_ = n.SendEvent(ctx, "teammate.error", teamEventPayload(team, map[string]interface{}{
+			"teammate": teammateName,
+			"pod":      podName,
+			"reason":   pod.Status.Reason,
+			"message":  pod.Status.Message,
+		}))
+	}
+	check("lead", agentPodName(team, "lead"))
+	for _, tm := range team.Spec.Teammates {
+		check(tm.Name, agentPodName(team, tm.Name))
+	}
+}
+
+// maybeFireBudgetWarning emits the `budget.warning` webhook event the first
+// time the team's estimated cost crosses 80% of its configured limit. Uses a
+// status Condition to dedupe across reconcile passes and operator restarts.
+// No-op when no budget is set or the threshold has not been reached.
+func (r *AgentTeamReconciler) maybeFireBudgetWarning(ctx context.Context, team *claudev1alpha1.AgentTeam) {
+	if team.Spec.Lifecycle == nil || team.Spec.Lifecycle.BudgetLimit == nil {
+		return
+	}
+	if budgetWarningSent(team) {
+		return
+	}
+	var limit float64
+	if _, err := fmt.Sscanf(*team.Spec.Lifecycle.BudgetLimit, "%f", &limit); err != nil || limit <= 0 {
+		return
+	}
+	current := newTeamTracker(team).GetTotalCost()
+	if current < 0.8*limit {
+		return
+	}
+	_ = teamNotifier(team).SendEvent(ctx, "budget.warning", teamEventPayload(team, map[string]interface{}{
+		"estimatedCost": fmt.Sprintf("%.2f", current),
+		"budgetLimit":   fmt.Sprintf("%.2f", limit),
+		"threshold":     "80%",
+	}))
+	markBudgetWarningSent(team, current, limit)
+}
+
+// exportBudgetMetrics publishes the team's current estimated cost and remaining
+// budget to Prometheus. Called on each reconcileRunning pass after the cost
+// estimate has been updated.
+func (r *AgentTeamReconciler) exportBudgetMetrics(team *claudev1alpha1.AgentTeam) {
+	tracker := newTeamTracker(team)
+	current := tracker.GetTotalCost()
+	metrics.RecordCost(team.Name, team.Namespace, current)
+
+	if team.Spec.Lifecycle == nil || team.Spec.Lifecycle.BudgetLimit == nil {
+		return
+	}
+	var limit float64
+	if _, err := fmt.Sscanf(*team.Spec.Lifecycle.BudgetLimit, "%f", &limit); err != nil {
+		return
+	}
+	metrics.SetBudgetRemaining(team.Name, team.Namespace, limit-current)
+}
+
+// recordTerminalMetrics records the team's outcome in Prometheus. Idempotent:
+// safe to call on every terminal reconcile pass.
+func (r *AgentTeamReconciler) recordTerminalMetrics(team *claudev1alpha1.AgentTeam) {
+	if team.Status.Phase == "Completed" {
+		var duration float64
+		if team.Status.StartedAt != nil {
+			duration = time.Since(team.Status.StartedAt.Time).Seconds()
+		}
+		metrics.RecordTeamComplete(team.Name, team.Namespace, duration)
+		return
+	}
+	metrics.RecordTeamFailed(team.Name, team.Namespace)
 }
 
 // --- PVC Management ---
@@ -538,6 +761,12 @@ func (r *AgentTeamReconciler) ensureAgentPod(
 		return err
 	}
 
+	// Provision the agent's RBAC (SA + Role + RoleBinding) before the pod so
+	// the kubelet can bind the SA at creation time.
+	if err := r.ensureAgentServiceAccount(ctx, team, agentName); err != nil {
+		return fmt.Errorf("ensuring ServiceAccount for %s: %w", agentName, err)
+	}
+
 	// Create a ConfigMap with the MCP config if this agent has MCP servers.
 	if len(mcpServers) > 0 {
 		if err := r.ensureMCPConfigMap(ctx, team, agentName, mcpServers); err != nil {
@@ -550,6 +779,112 @@ func (r *AgentTeamReconciler) ensureAgentPod(
 		return err
 	}
 	return r.Create(ctx, pod)
+}
+
+// ensureAgentServiceAccount provisions the ServiceAccount, Role, and
+// RoleBinding for a single agent pod. The Role is narrowly scoped — get on
+// the team's API key Secret (restricted to that exact secret name) and
+// get/list/watch on the team's PVCs. A compromised agent pod therefore
+// cannot enumerate cluster resources or reach other teams' secrets.
+//
+// The lead and each teammate get their own SA so per-agent compromise stays
+// contained. This is the core KubeCon RBAC story; it's worth the churn of
+// N resources per team.
+//
+// Safe to call repeatedly — missing resources are created and existing Roles
+// are updated in place if the team's auth secret or PVC set has changed.
+func (r *AgentTeamReconciler) ensureAgentServiceAccount(ctx context.Context, team *claudev1alpha1.AgentTeam, agentName string) error {
+	name := agentServiceAccountName(team, agentName)
+
+	// ServiceAccount.
+	sa := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: team.Namespace},
+	}
+	if err := ctrl.SetControllerReference(team, sa, r.Scheme); err != nil {
+		return err
+	}
+	if err := r.Create(ctx, sa); err != nil && !errors.IsAlreadyExists(err) {
+		return fmt.Errorf("creating ServiceAccount %s: %w", name, err)
+	}
+
+	// Role. Rules are computed from the team's current auth + PVC set so the
+	// Role tracks spec changes.
+	rules := agentPolicyRules(team)
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: team.Namespace},
+		Rules:      rules,
+	}
+	if err := ctrl.SetControllerReference(team, role, r.Scheme); err != nil {
+		return err
+	}
+	existing := &rbacv1.Role{}
+	switch err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: team.Namespace}, existing); {
+	case errors.IsNotFound(err):
+		if err := r.Create(ctx, role); err != nil {
+			return fmt.Errorf("creating Role %s: %w", name, err)
+		}
+	case err != nil:
+		return err
+	default:
+		existing.Rules = rules
+		if err := r.Update(ctx, existing); err != nil {
+			return fmt.Errorf("updating Role %s: %w", name, err)
+		}
+	}
+
+	// RoleBinding.
+	binding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: team.Namespace},
+		Subjects: []rbacv1.Subject{
+			{Kind: "ServiceAccount", Name: name, Namespace: team.Namespace},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     name,
+		},
+	}
+	if err := ctrl.SetControllerReference(team, binding, r.Scheme); err != nil {
+		return err
+	}
+	if err := r.Create(ctx, binding); err != nil && !errors.IsAlreadyExists(err) {
+		return fmt.Errorf("creating RoleBinding %s: %w", name, err)
+	}
+	return nil
+}
+
+// agentPolicyRules returns the per-agent Role rule set: read the team's API
+// key Secret (by exact name), and read the team's PVCs. Rules are only
+// emitted for resources that actually exist on the team — e.g. an OAuth-only
+// team has no Secret rule.
+func agentPolicyRules(team *claudev1alpha1.AgentTeam) []rbacv1.PolicyRule {
+	var rules []rbacv1.PolicyRule
+
+	secretNames := []string{}
+	if team.Spec.Auth.APIKeySecret != "" {
+		secretNames = append(secretNames, team.Spec.Auth.APIKeySecret)
+	}
+	if team.Spec.Auth.OAuthSecret != "" {
+		secretNames = append(secretNames, team.Spec.Auth.OAuthSecret)
+	}
+	if len(secretNames) > 0 {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{""},
+			Resources:     []string{"secrets"},
+			ResourceNames: secretNames,
+			Verbs:         []string{"get"},
+		})
+	}
+
+	if pvcs := teamPVCNames(team); len(pvcs) > 0 {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{""},
+			Resources:     []string{"persistentvolumeclaims"},
+			ResourceNames: pvcs,
+			Verbs:         []string{"get", "list", "watch"},
+		})
+	}
+	return rules
 }
 
 // ensureMCPConfigMap creates a ConfigMap with the agent's .mcp.json content.
@@ -771,7 +1106,8 @@ func (r *AgentTeamReconciler) buildAgentPod(
 			Labels:    labels,
 		},
 		Spec: corev1.PodSpec{
-			RestartPolicy: corev1.RestartPolicyNever,
+			RestartPolicy:      corev1.RestartPolicyNever,
+			ServiceAccountName: agentServiceAccountName(team, agentName),
 			Containers: []corev1.Container{
 				{
 					Name:         "claude-code",
@@ -925,11 +1261,182 @@ func (r *AgentTeamReconciler) executeOnComplete(ctx context.Context, team *claud
 			return r.sendWebhookEvent(ctx, team.Spec.Observability.Webhook.URL, "completed", team)
 		}
 	case "create-pr":
-		log.Info("TODO: create PR via gh CLI or GitHub API")
+		if err := r.executeCreatePR(ctx, team); err != nil {
+			log.Error(err, "create-pr failed")
+			r.recordEvent(team, corev1.EventTypeWarning, "PRCreationFailed", err.Error())
+			return err
+		}
 	case "push-branch":
 		log.Info("TODO: push consolidated branch")
 	}
 	return nil
+}
+
+// --- Pull Request Creation ---
+
+const (
+	defaultPRTitleTemplate = "claude-teams: {{.TeamName}}"
+	defaultBaseBranch      = "main"
+)
+
+// executeCreatePR opens a GitHub pull request for a completed coding team.
+// Requires spec.repository.url (to parse owner/repo) and
+// spec.lifecycle.githubTokenSecret (to authenticate). Reviewers and labels
+// from spec.lifecycle.pullRequest are applied best-effort; failures there
+// are logged but do not fail the overall operation — the PR already exists.
+//
+// Writes the created PR's URL and state into status.pullRequest. Safe to
+// call repeatedly; a PR that already exists does not re-trigger the
+// HTTP request because executeOnComplete only runs once per team.
+func (r *AgentTeamReconciler) executeCreatePR(ctx context.Context, team *claudev1alpha1.AgentTeam) error {
+	log := log.FromContext(ctx)
+
+	if team.Spec.Repository == nil || team.Spec.Repository.URL == "" {
+		return fmt.Errorf("create-pr requires spec.repository.url")
+	}
+	if team.Spec.Lifecycle == nil || team.Spec.Lifecycle.GitHubTokenSecret == "" {
+		return fmt.Errorf("create-pr requires spec.lifecycle.githubTokenSecret")
+	}
+
+	owner, repo, err := github.ParseRepo(team.Spec.Repository.URL)
+	if err != nil {
+		return fmt.Errorf("parsing repo URL: %w", err)
+	}
+
+	token, err := r.readGitHubToken(ctx, team)
+	if err != nil {
+		return err
+	}
+
+	title, err := renderPRTitle(team)
+	if err != nil {
+		return fmt.Errorf("rendering PR title: %w", err)
+	}
+	body := buildPRBody(team)
+
+	head, base := prBranches(team)
+	var clientOpts []github.Option
+	if r.GitHubBaseURL != "" {
+		clientOpts = append(clientOpts, github.WithBaseURL(r.GitHubBaseURL))
+	}
+	client := github.NewClient(token, clientOpts...)
+	pr, err := client.CreatePullRequest(ctx, owner, repo, &github.PullRequestRequest{
+		Title: title,
+		Body:  body,
+		Head:  head,
+		Base:  base,
+	})
+	if err != nil {
+		return fmt.Errorf("creating pull request: %w", err)
+	}
+
+	team.Status.PullRequest = &claudev1alpha1.PullRequestStatus{
+		URL:   pr.HTMLURL,
+		State: pr.State,
+	}
+	r.recordEvent(team, corev1.EventTypeNormal, "PullRequestCreated", "Opened PR %s", pr.HTMLURL)
+	log.Info("Pull request created", "url", pr.HTMLURL, "number", pr.Number)
+
+	// Reviewers + labels are nice-to-haves: if the token cannot modify them
+	// (e.g. missing scopes on a read-write-to-pulls-only PAT), the PR is
+	// still useful. Log the error and keep going.
+	if prSpec := team.Spec.Lifecycle.PullRequest; prSpec != nil {
+		if err := client.RequestReviewers(ctx, owner, repo, pr.Number, prSpec.Reviewers); err != nil {
+			log.Error(err, "requesting reviewers", "reviewers", prSpec.Reviewers)
+		}
+		if err := client.AddLabels(ctx, owner, repo, pr.Number, prSpec.Labels); err != nil {
+			log.Error(err, "adding labels", "labels", prSpec.Labels)
+		}
+	}
+	return nil
+}
+
+// readGitHubToken loads the GitHub token from the configured Secret. The
+// Secret must have a key named GITHUB_TOKEN.
+func (r *AgentTeamReconciler) readGitHubToken(ctx context.Context, team *claudev1alpha1.AgentTeam) (string, error) {
+	name := team.Spec.Lifecycle.GitHubTokenSecret
+	secret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: team.Namespace}, secret); err != nil {
+		return "", fmt.Errorf("reading GitHub token secret %s: %w", name, err)
+	}
+	token, ok := secret.Data["GITHUB_TOKEN"]
+	if !ok || len(token) == 0 {
+		return "", fmt.Errorf("secret %s is missing key GITHUB_TOKEN", name)
+	}
+	return strings.TrimSpace(string(token)), nil
+}
+
+// renderPRTitle resolves the PR title template. Precedence:
+// Lifecycle.PRTitleTemplate > Lifecycle.PullRequest.TitleTemplate > default.
+func renderPRTitle(team *claudev1alpha1.AgentTeam) (string, error) {
+	tmpl := defaultPRTitleTemplate
+	if team.Spec.Lifecycle != nil {
+		if team.Spec.Lifecycle.PRTitleTemplate != "" {
+			tmpl = team.Spec.Lifecycle.PRTitleTemplate
+		} else if team.Spec.Lifecycle.PullRequest != nil && team.Spec.Lifecycle.PullRequest.TitleTemplate != "" {
+			tmpl = team.Spec.Lifecycle.PullRequest.TitleTemplate
+		}
+	}
+	t, err := template.New("pr-title").Parse(tmpl)
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, map[string]string{
+		"TeamName":  team.Name,
+		"Namespace": team.Namespace,
+	}); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(buf.String()), nil
+}
+
+// buildPRBody renders the PR body from the team's status. Lists completed
+// task counts and the list of teammates that contributed.
+func buildPRBody(team *claudev1alpha1.AgentTeam) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Automated pull request from Claude Agent Teams.\n\n")
+	fmt.Fprintf(&b, "**Team:** `%s/%s`\n\n", team.Namespace, team.Name)
+
+	if team.Status.Tasks != nil {
+		fmt.Fprintf(&b, "## Tasks\n\n- Completed: %d\n- Total: %d\n\n",
+			team.Status.Tasks.Completed, team.Status.Tasks.Total)
+	}
+
+	if len(team.Status.Teammates) > 0 {
+		fmt.Fprintf(&b, "## Teammates\n\n")
+		for _, tm := range team.Status.Teammates {
+			fmt.Fprintf(&b, "- `%s` — phase=%s, tasksCompleted=%d, restarts=%d\n",
+				tm.Name, tm.Phase, tm.TasksCompleted, tm.RestartCount)
+		}
+		fmt.Fprintln(&b)
+	}
+
+	if team.Status.EstimatedCost != "" {
+		fmt.Fprintf(&b, "**Estimated cost:** $%s\n\n", team.Status.EstimatedCost)
+	}
+
+	fmt.Fprintln(&b, "---")
+	fmt.Fprintln(&b, "Generated by [claude-teams-operator](https://github.com/amcheste/claude-teams-operator).")
+	return b.String()
+}
+
+// prBranches returns the head and base branches for the PR. Head defaults to
+// spec.repository.branch (the branch the agents worked on); base defaults to
+// spec.lifecycle.pullRequest.targetBranch, then "main".
+func prBranches(team *claudev1alpha1.AgentTeam) (head, base string) {
+	head = ""
+	if team.Spec.Repository != nil {
+		head = team.Spec.Repository.Branch
+	}
+	if head == "" {
+		head = defaultBaseBranch
+	}
+	base = defaultBaseBranch
+	if team.Spec.Lifecycle != nil && team.Spec.Lifecycle.PullRequest != nil && team.Spec.Lifecycle.PullRequest.TargetBranch != "" {
+		base = team.Spec.Lifecycle.PullRequest.TargetBranch
+	}
+	return head, base
 }
 
 // --- Approval Gates ---
@@ -1050,35 +1557,36 @@ func (r *AgentTeamReconciler) isBudgetExceeded(team *claudev1alpha1.AgentTeam) b
 	if team.Spec.Lifecycle == nil || team.Spec.Lifecycle.BudgetLimit == nil {
 		return false
 	}
-	var limit, current float64
-	if _, err := fmt.Sscanf(*team.Spec.Lifecycle.BudgetLimit, "%f", &limit); err != nil {
-		return false
-	}
-	fmt.Sscanf(team.Status.EstimatedCost, "%f", &current) //nolint:errcheck
-	return current >= limit
+	return newTeamTracker(team).IsOverBudget()
 }
 
-// estimateCost returns a rough USD estimate based on elapsed time and model type.
-// Assumes ~1500 tokens/min for opus ($15/M), ~3000 tokens/min for sonnet ($3/M).
+// estimateCost returns the team's current USD cost estimate, formatted for
+// Status.EstimatedCost display. Delegates to the budget package so rates and
+// heuristics live in one place.
 func estimateCost(team *claudev1alpha1.AgentTeam) string {
-	if team.Status.StartedAt == nil {
-		return "0.00"
-	}
-	elapsed := time.Since(team.Status.StartedAt.Time).Minutes()
-	total := estimateModelCost(team.Spec.Lead.Model, elapsed)
-	for _, tm := range team.Spec.Teammates {
-		total += estimateModelCost(tm.Model, elapsed)
-	}
-	return fmt.Sprintf("%.2f", total)
+	return fmt.Sprintf("%.2f", newTeamTracker(team).GetTotalCost())
 }
 
-func estimateModelCost(model string, elapsedMinutes float64) float64 {
-	switch model {
-	case "opus":
-		return elapsedMinutes * 1500 / 1_000_000 * 15
-	default:
-		return elapsedMinutes * 3000 / 1_000_000 * 3
+// newTeamTracker builds a budget Tracker seeded with one session per agent
+// (lead + teammates) covering the wall-clock time elapsed since the team
+// started. The tracker's limit comes from Spec.Lifecycle.BudgetLimit so a
+// single tracker can answer both "how much has been spent" and "are we
+// over-budget" without a second parse of the limit string.
+func newTeamTracker(team *claudev1alpha1.AgentTeam) *budget.Tracker {
+	var limit float64
+	if team.Spec.Lifecycle != nil && team.Spec.Lifecycle.BudgetLimit != nil {
+		fmt.Sscanf(*team.Spec.Lifecycle.BudgetLimit, "%f", &limit) //nolint:errcheck
 	}
+	tracker := budget.NewTracker(limit)
+	if team.Status.StartedAt == nil {
+		return tracker
+	}
+	elapsedSec := int64(time.Since(team.Status.StartedAt.Time).Seconds())
+	tracker.RecordSession(team.Spec.Lead.Model, elapsedSec)
+	for _, tm := range team.Spec.Teammates {
+		tracker.RecordSession(tm.Model, elapsedSec)
+	}
+	return tracker
 }
 
 // --- Pod Cleanup ---
@@ -1100,6 +1608,57 @@ func (r *AgentTeamReconciler) terminateAllPods(ctx context.Context, team *claude
 		}
 	}
 	return nil
+}
+
+// --- Webhook Helpers ---
+
+// teamNotifier returns a webhook.Notifier built from the team's Observability
+// config, or nil if no webhook is configured. The returned *Notifier is
+// nil-safe — callers may invoke SendEvent on it unconditionally.
+func teamNotifier(team *claudev1alpha1.AgentTeam) *webhook.Notifier {
+	if team.Spec.Observability == nil || team.Spec.Observability.Webhook == nil {
+		return nil
+	}
+	w := team.Spec.Observability.Webhook
+	return webhook.NewNotifier(w.URL, w.Events)
+}
+
+// teamEventPayload builds the standard webhook envelope fields (team, namespace)
+// merged with an event-specific `data` subobject.
+func teamEventPayload(team *claudev1alpha1.AgentTeam, data map[string]interface{}) map[string]interface{} {
+	payload := map[string]interface{}{
+		"team":      team.Name,
+		"namespace": team.Namespace,
+	}
+	if data != nil {
+		payload["data"] = data
+	}
+	return payload
+}
+
+// budgetWarningSent reports whether the 80% budget warning webhook has already
+// fired for this team. Persisted in the team's Conditions so it survives
+// operator restarts.
+func budgetWarningSent(team *claudev1alpha1.AgentTeam) bool {
+	for _, c := range team.Status.Conditions {
+		if c.Type == "BudgetWarningSent" && c.Status == metav1.ConditionTrue {
+			return true
+		}
+	}
+	return false
+}
+
+// markBudgetWarningSent records that the budget warning webhook has fired so
+// subsequent reconciles do not re-fire it.
+func markBudgetWarningSent(team *claudev1alpha1.AgentTeam, cost, limit float64) {
+	now := metav1.Now()
+	team.Status.Conditions = append(team.Status.Conditions, metav1.Condition{
+		Type:               "BudgetWarningSent",
+		Status:             metav1.ConditionTrue,
+		Reason:             "ThresholdReached",
+		Message:            fmt.Sprintf("Estimated cost %.2f reached 80%% of budget limit %.2f", cost, limit),
+		LastTransitionTime: now,
+	})
 }
 
 // --- Condition Helpers ---
@@ -1171,6 +1730,32 @@ func agentPodName(team *claudev1alpha1.AgentTeam, agentName string) string {
 
 func agentMCPConfigMapName(team *claudev1alpha1.AgentTeam, agentName string) string {
 	return team.Name + "-" + agentName + "-mcp"
+}
+
+// agentServiceAccountName returns the ServiceAccount name used by an agent pod.
+// Shares the pod's naming convention so `kubectl get sa,pod -l ...` pairs them
+// visually.
+func agentServiceAccountName(team *claudev1alpha1.AgentTeam, agentName string) string {
+	return agentPodName(team, agentName)
+}
+
+// teamPVCNames returns every PVC name an agent pod may mount for the team:
+// the team-state PVC (always), the repo PVC in coding mode, and the output
+// PVC in cowork mode. Order is stable so the Role's resourceNames list
+// does not churn across reconciles.
+func teamPVCNames(team *claudev1alpha1.AgentTeam) []string {
+	names := []string{teamStatePVCName(team)}
+	if team.Spec.Repository != nil && team.Spec.Repository.URL != "" {
+		names = append(names, repoPVCName(team))
+	}
+	if team.Spec.Workspace != nil && team.Spec.Workspace.Output != nil {
+		n := team.Spec.Workspace.Output.PVC
+		if n == "" {
+			n = outputPVCName(team)
+		}
+		names = append(names, n)
+	}
+	return names
 }
 
 func boolPtr(b bool) *bool { return &b }

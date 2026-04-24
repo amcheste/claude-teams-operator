@@ -45,6 +45,14 @@ rules:
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get", "list", "watch"]
+  # ServiceAccounts (per-agent pod identities)
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Roles + RoleBindings (per-agent RBAC scoping)
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   # Jobs (init job for repo clone)
   - apiGroups: ["batch"]
     resources: ["jobs"]
