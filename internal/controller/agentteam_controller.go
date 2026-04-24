@@ -11,6 +11,7 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -104,7 +105,10 @@ func (r *AgentTeamReconciler) initImage() string {
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=get;list;watch;create;update;patch;delete
 
 func (r *AgentTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
@@ -749,6 +753,12 @@ func (r *AgentTeamReconciler) ensureAgentPod(
 		return err
 	}
 
+	// Provision the agent's RBAC (SA + Role + RoleBinding) before the pod so
+	// the kubelet can bind the SA at creation time.
+	if err := r.ensureAgentServiceAccount(ctx, team, agentName); err != nil {
+		return fmt.Errorf("ensuring ServiceAccount for %s: %w", agentName, err)
+	}
+
 	// Create a ConfigMap with the MCP config if this agent has MCP servers.
 	if len(mcpServers) > 0 {
 		if err := r.ensureMCPConfigMap(ctx, team, agentName, mcpServers); err != nil {
@@ -761,6 +771,112 @@ func (r *AgentTeamReconciler) ensureAgentPod(
 		return err
 	}
 	return r.Create(ctx, pod)
+}
+
+// ensureAgentServiceAccount provisions the ServiceAccount, Role, and
+// RoleBinding for a single agent pod. The Role is narrowly scoped — get on
+// the team's API key Secret (restricted to that exact secret name) and
+// get/list/watch on the team's PVCs. A compromised agent pod therefore
+// cannot enumerate cluster resources or reach other teams' secrets.
+//
+// The lead and each teammate get their own SA so per-agent compromise stays
+// contained. This is the core KubeCon RBAC story; it's worth the churn of
+// N resources per team.
+//
+// Safe to call repeatedly — missing resources are created and existing Roles
+// are updated in place if the team's auth secret or PVC set has changed.
+func (r *AgentTeamReconciler) ensureAgentServiceAccount(ctx context.Context, team *claudev1alpha1.AgentTeam, agentName string) error {
+	name := agentServiceAccountName(team, agentName)
+
+	// ServiceAccount.
+	sa := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: team.Namespace},
+	}
+	if err := ctrl.SetControllerReference(team, sa, r.Scheme); err != nil {
+		return err
+	}
+	if err := r.Create(ctx, sa); err != nil && !errors.IsAlreadyExists(err) {
+		return fmt.Errorf("creating ServiceAccount %s: %w", name, err)
+	}
+
+	// Role. Rules are computed from the team's current auth + PVC set so the
+	// Role tracks spec changes.
+	rules := agentPolicyRules(team)
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: team.Namespace},
+		Rules:      rules,
+	}
+	if err := ctrl.SetControllerReference(team, role, r.Scheme); err != nil {
+		return err
+	}
+	existing := &rbacv1.Role{}
+	switch err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: team.Namespace}, existing); {
+	case errors.IsNotFound(err):
+		if err := r.Create(ctx, role); err != nil {
+			return fmt.Errorf("creating Role %s: %w", name, err)
+		}
+	case err != nil:
+		return err
+	default:
+		existing.Rules = rules
+		if err := r.Update(ctx, existing); err != nil {
+			return fmt.Errorf("updating Role %s: %w", name, err)
+		}
+	}
+
+	// RoleBinding.
+	binding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: team.Namespace},
+		Subjects: []rbacv1.Subject{
+			{Kind: "ServiceAccount", Name: name, Namespace: team.Namespace},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     name,
+		},
+	}
+	if err := ctrl.SetControllerReference(team, binding, r.Scheme); err != nil {
+		return err
+	}
+	if err := r.Create(ctx, binding); err != nil && !errors.IsAlreadyExists(err) {
+		return fmt.Errorf("creating RoleBinding %s: %w", name, err)
+	}
+	return nil
+}
+
+// agentPolicyRules returns the per-agent Role rule set: read the team's API
+// key Secret (by exact name), and read the team's PVCs. Rules are only
+// emitted for resources that actually exist on the team — e.g. an OAuth-only
+// team has no Secret rule.
+func agentPolicyRules(team *claudev1alpha1.AgentTeam) []rbacv1.PolicyRule {
+	var rules []rbacv1.PolicyRule
+
+	secretNames := []string{}
+	if team.Spec.Auth.APIKeySecret != "" {
+		secretNames = append(secretNames, team.Spec.Auth.APIKeySecret)
+	}
+	if team.Spec.Auth.OAuthSecret != "" {
+		secretNames = append(secretNames, team.Spec.Auth.OAuthSecret)
+	}
+	if len(secretNames) > 0 {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{""},
+			Resources:     []string{"secrets"},
+			ResourceNames: secretNames,
+			Verbs:         []string{"get"},
+		})
+	}
+
+	if pvcs := teamPVCNames(team); len(pvcs) > 0 {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{""},
+			Resources:     []string{"persistentvolumeclaims"},
+			ResourceNames: pvcs,
+			Verbs:         []string{"get", "list", "watch"},
+		})
+	}
+	return rules
 }
 
 // ensureMCPConfigMap creates a ConfigMap with the agent's .mcp.json content.
@@ -982,7 +1098,8 @@ func (r *AgentTeamReconciler) buildAgentPod(
 			Labels:    labels,
 		},
 		Spec: corev1.PodSpec{
-			RestartPolicy: corev1.RestartPolicyNever,
+			RestartPolicy:      corev1.RestartPolicyNever,
+			ServiceAccountName: agentServiceAccountName(team, agentName),
 			Containers: []corev1.Container{
 				{
 					Name:         "claude-code",
@@ -1434,6 +1551,32 @@ func agentPodName(team *claudev1alpha1.AgentTeam, agentName string) string {
 
 func agentMCPConfigMapName(team *claudev1alpha1.AgentTeam, agentName string) string {
 	return team.Name + "-" + agentName + "-mcp"
+}
+
+// agentServiceAccountName returns the ServiceAccount name used by an agent pod.
+// Shares the pod's naming convention so `kubectl get sa,pod -l ...` pairs them
+// visually.
+func agentServiceAccountName(team *claudev1alpha1.AgentTeam, agentName string) string {
+	return agentPodName(team, agentName)
+}
+
+// teamPVCNames returns every PVC name an agent pod may mount for the team:
+// the team-state PVC (always), the repo PVC in coding mode, and the output
+// PVC in cowork mode. Order is stable so the Role's resourceNames list
+// does not churn across reconciles.
+func teamPVCNames(team *claudev1alpha1.AgentTeam) []string {
+	names := []string{teamStatePVCName(team)}
+	if team.Spec.Repository != nil && team.Spec.Repository.URL != "" {
+		names = append(names, repoPVCName(team))
+	}
+	if team.Spec.Workspace != nil && team.Spec.Workspace.Output != nil {
+		n := team.Spec.Workspace.Output.PVC
+		if n == "" {
+			n = outputPVCName(team)
+		}
+		names = append(names, n)
+	}
+	return names
 }
 
 func boolPtr(b bool) *bool { return &b }
