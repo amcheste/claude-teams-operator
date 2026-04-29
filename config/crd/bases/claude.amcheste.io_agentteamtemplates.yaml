@@ -125,6 +125,21 @@ spec:
                     description: BudgetLimit is the maximum API spend in USD before
                       the team is terminated (e.g. "10.00").
                     type: string
+                  consolidatedBranchTemplate:
+                    description: |-
+                      ConsolidatedBranchTemplate is a Go template rendered to produce the
+                      branch name pushed by OnComplete=push-branch. Available variables:
+                      .TeamName, .Namespace. When empty, defaults to "teams/{{.TeamName}}".
+                    type: string
+                  gitCredentialsSecret:
+                    description: |-
+                      GitCredentialsSecret names a Secret in the team's namespace carrying git
+                      push credentials. The Secret must contain either 'ssh-privatekey' or
+                      'token'. Used by OnComplete=push-branch (and OnComplete=create-pr when
+                      push-branch runs ahead of it). Falls back to Spec.Repository.CredentialsSecret
+                      when unset, so teams that already configured clone credentials with push
+                      scope don't need to duplicate.
+                    type: string
                   githubTokenSecret:
                     description: |-
                       GitHubTokenSecret names a Secret in the team's namespace carrying a

@@ -3,6 +3,7 @@ name: E2E Tests (Real Claude API)
 # Real-API E2E runs hit the Anthropic API and cost money per run. We gate them
 # tightly:
 #   * Only on pushes to main (post-merge, final verification before a release)
+#   * Called from release.yml before any artifact ships (fail_if_no_key=true)
 #   * Only when the ANTHROPIC_API_KEY secret is configured
 #   * workflow_dispatch available for ad-hoc manual runs by maintainers
 #
@@ -11,6 +12,12 @@ name: E2E Tests (Real Claude API)
 on:
   push:
     branches: [main]
+  workflow_call:
+    inputs:
+      fail_if_no_key:
+        description: 'Fail when ANTHROPIC_API_KEY is unset instead of skipping silently. Set true when calling from the release pipeline.'
+        type: boolean
+        default: false
   workflow_dispatch:
 
 permissions:
@@ -29,10 +36,19 @@ jobs:
       - id: check
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          FAIL_IF_NO_KEY: ${{ inputs.fail_if_no_key }}
         run: |
           if [ -n "$ANTHROPIC_API_KEY" ]; then
             echo "has_key=true" >> "$GITHUB_OUTPUT"
             echo "ANTHROPIC_API_KEY is configured — E2E job will run."
+          elif [ "$FAIL_IF_NO_KEY" = "true" ]; then
+            # Release path: skipping E2E silently would publish artifacts that
+            # haven't been verified against the real Anthropic API. Fail loud
+            # so the maintainer sees it and configures the secret.
+            echo "::error::ANTHROPIC_API_KEY secret is not configured on this repo."
+            echo "::error::A release cannot ship without real-API E2E validation."
+            echo "::error::Configure the secret with: gh secret set ANTHROPIC_API_KEY --repo amcheste/claude-teams-operator"
+            exit 1
           else
             echo "has_key=false" >> "$GITHUB_OUTPUT"
             echo "::warning::ANTHROPIC_API_KEY not configured — E2E job will be skipped."

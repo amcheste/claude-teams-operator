@@ -118,27 +118,27 @@ This project is being developed with the goal of presenting at KubeCon NA 2026 (
 
 ### Release Timeline
 
-All milestones and issues are tracked on GitHub. The CFP opens May/June 2026 — v0.2.0 must close before then so there is a working demo to write the proposal around.
+All milestones and issues are tracked on GitHub. The CFP is **OPEN** with submissions due **May 31 2026 at 11:59pm MT** — see KUBECON.md.
 
 | Version | GitHub Milestone | Due | What it unlocks |
 |---------|-----------------|-----|-----------------|
-| **v0.1.0** | Initial Release | Apr 30 2026 | Core operator, 50+25+19 tests, CI — PRs #2 + #3 |
-| **v0.2.0** | Foundation & Real Runner | Jun 1 2026 | Real `claude-code-runner` image, E2E test, mailbox PVC validation, talk-ready `describe` output |
-| **v0.3.0** | Observability & Budget | Jul 15 2026 | Prometheus metrics, `internal/budget` package, webhook engine, Grafana dashboard |
-| **v0.4.0** | Resilience & RBAC | Aug 31 2026 | Crash re-spawn, per-agent ServiceAccounts, `onComplete: create-pr`, `onComplete: push-branch` |
+| **v0.1.0** ✅ | Initial Release | Apr 13 2026 | Core operator, 50+25+19 tests, CI |
+| **v0.2.0** ✅ | Foundation & Real Runner | Apr 19 2026 | Real `claude-code-runner` image, E2E test, mailbox PVC validation, talk-ready `describe` output |
+| **v0.3.0** ✅ | Observability & Budget | Apr 24 2026 | Prometheus metrics, `internal/budget` package, webhook engine, Grafana dashboard (plus early Resilience/RBAC previews) |
+| **v0.4.0** | Resilience & RBAC | Aug 31 2026 | Crash re-spawn ✅, per-agent ServiceAccounts ✅, `onComplete: create-pr` ✅, `onComplete: push-branch` |
 | **v0.5.0** | Template Engine & Helm | Sep 30 2026 | `AgentTeamTemplate`/`AgentTeamRun` controllers, production Helm chart, CONTRIBUTING.md |
-| **v1.0.0** | KubeCon Demo Polish | Oct 20 2026 | Demo script, real-API CI test, CFP submitted, OCI skill distribution |
+| **v0.6.0** | Operator Dashboard | Oct 5 2026 | Web UI for running AgentTeams: backend API, list + detail views (HTMX + Go templates), live SSE updates, Helm packaging |
+| **v1.0.0** | KubeCon Demo Polish | Oct 26 2026 | Demo script, CFP submitted, OCI skill distribution, dashboard presentation mode for stage |
 
-**KubeCon talk:** November 9–12 2026, Salt Lake City. CFP deadline: May/June 2026 (watch https://sessionize.com/kubecon-cloudnativecon-north-america-2026/).
+**KubeCon talk:** November 9–12 2026, Salt Lake City. CFP deadline: May 31 2026.
 
-### Current Priority (v0.2.0)
+### Current Priority (post-v0.3.0)
 
-The highest-value issues for the next milestone are:
-1. **#4** — Build and publish the `claude-code-runner` Docker image (prerequisite for everything)
-2. **#6** — Validate mailbox file exchange on shared PVC in Kind (core architectural claim)
-3. **#5** — Real E2E acceptance test against Claude API
-4. **#7** — Make `kubectl describe agentteam` talk-ready (`+kubebuilder:printcolumn`, Events)
-5. **#8** — Document the RWX PVC constraint in ARCHITECTURE.md
+The next highest-value issues:
+1. **#16** — `onComplete: push-branch` — closes out v0.4.0 alongside the already-merged #13/#14/#15
+2. **#17 / #18** — AgentTeamTemplate + AgentTeamRun controllers (v0.5.0)
+3. **#137–#140** — the operator dashboard (v0.6.0)
+4. **#23** — draft and submit the KubeCon CFP by May 31 — this is the hard deadline
 
 ### Ask of Claude Code
 
