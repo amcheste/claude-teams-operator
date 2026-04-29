@@ -27,16 +27,34 @@ type AgentTeamTemplateSpec struct {
 	QualityGates *QualityGateSpec `json:"qualityGates,omitempty"`
 }
 
+// AgentTeamTemplateStatus reports validation state for an AgentTeamTemplate.
+// The reconciler validates teammate references and writes a Ready condition;
+// AgentTeamRun controllers should refuse to instantiate templates where
+// Ready is false.
+type AgentTeamTemplateStatus struct {
+	// Ready is true when the template has passed validation and is safe to
+	// instantiate via an AgentTeamRun.
+	// +optional
+	Ready bool `json:"ready,omitempty"`
+
+	// Conditions track the latest validation state with structured reasons.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Description",type=string,JSONPath=`.spec.description`
 // +kubebuilder:printcolumn:name="Teammates",type=integer,JSONPath=`.spec.teammates`
+// +kubebuilder:printcolumn:name="Ready",type=boolean,JSONPath=`.status.ready`
 
 // AgentTeamTemplate is a reusable team definition.
 type AgentTeamTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec AgentTeamTemplateSpec `json:"spec,omitempty"`
+	Spec   AgentTeamTemplateSpec   `json:"spec,omitempty"`
+	Status AgentTeamTemplateStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
