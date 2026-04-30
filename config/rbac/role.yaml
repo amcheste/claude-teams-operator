@@ -50,6 +50,7 @@ rules:
   - claude.amcheste.io
   resources:
   - agentteams
+  - agentteamtemplates
   verbs:
   - create
   - delete
@@ -62,12 +63,14 @@ rules:
   - claude.amcheste.io
   resources:
   - agentteams/finalizers
+  - agentteamtemplates/finalizers
   verbs:
   - update
 - apiGroups:
   - claude.amcheste.io
   resources:
   - agentteams/status
+  - agentteamtemplates/status
   verbs:
   - get
   - patch
