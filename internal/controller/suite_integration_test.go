@@ -75,6 +75,16 @@ var _ = BeforeSuite(func() {
 		SkipInitScript: true,
 	}).SetupWithManager(mgr)).To(Succeed())
 
+	Expect((&controller.AgentTeamTemplateReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr)).To(Succeed())
+
+	Expect((&controller.AgentTeamRunReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr)).To(Succeed())
+
 	go func() {
 		defer GinkgoRecover()
 		Expect(mgr.Start(ctx)).To(Succeed())
