@@ -1,7 +1,7 @@
 {{define "content"}}
 <div class="flex items-center justify-between mb-4">
   <h1 class="text-2xl font-semibold">Agent Teams</h1>
-  <span class="text-xs text-slate-500" id="last-refresh">live · refreshes every 5s</span>
+  <span class="text-xs text-slate-500">live · server-sent events</span>
 </div>
 
 <div class="bg-white rounded-lg shadow-sm overflow-hidden">
@@ -17,9 +17,9 @@
         <th class="px-4 py-2">Age</th>
       </tr>
     </thead>
-    <tbody hx-get="/api/htmx/teams"
-           hx-trigger="every 5s"
-           hx-swap="innerHTML">
+    <tbody hx-ext="sse"
+           sse-connect="/api/htmx/teams/sse"
+           sse-swap="update">
       {{template "list_rows" .Data}}
     </tbody>
   </table>
