@@ -1,0 +1,40 @@
+{{define "layout"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} — claude-teams-operator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    .phase-Pending     { background: #f3f4f6; color: #374151; }
+    .phase-Initializing{ background: #fef3c7; color: #92400e; }
+    .phase-Running     { background: #dbeafe; color: #1e40af; }
+    .phase-Completed   { background: #d1fae5; color: #065f46; }
+    .phase-Failed      { background: #fee2e2; color: #991b1b; }
+    .phase-TimedOut    { background: #fef3c7; color: #92400e; }
+    .phase-BudgetExceeded { background: #fee2e2; color: #991b1b; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 antialiased">
+  <header class="bg-slate-900 text-white">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center gap-4">
+      <a href="/" class="font-mono text-lg">claude-teams-operator</a>
+      <span class="text-slate-400 text-sm">{{.Subtitle}}</span>
+      <a href="/" class="ml-auto text-sm text-slate-300 hover:text-white">Teams</a>
+      <a href="/healthz" class="text-sm text-slate-300 hover:text-white">Health</a>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6">
+    {{template "content" .}}
+  </main>
+
+  <footer class="max-w-7xl mx-auto px-4 py-6 text-xs text-slate-500">
+    <a href="https://github.com/amcheste/claude-teams-operator" class="hover:text-slate-700">github.com/amcheste/claude-teams-operator</a>
+  </footer>
+</body>
+</html>
+{{end}}

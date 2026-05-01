@@ -54,6 +54,16 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/healthz", s.healthz)
 	mux.HandleFunc("/api/teams", s.listTeams)
 	mux.HandleFunc("/api/teams/", s.routeTeamDetail) // covers /{ns}/{name} and /{ns}/{name}/logs/{agent}
+
+	// HTML views (server-rendered HTMX). Same data as /api/teams/* but as
+	// HTML pages with `hx-trigger="every 5s"` polling baked in.
+	mux.HandleFunc("/", s.routeRoot) // / → list view; anything else → 404
+	mux.HandleFunc("/teams/", s.routeDetailHTML)
+
+	// HTMX fragment endpoints. Return JUST the table body / detail body so
+	// the polling swaps don't reload the entire page.
+	mux.HandleFunc("/api/htmx/teams", s.htmxListRows)
+	mux.HandleFunc("/api/htmx/teams/", s.htmxDetailBody)
 	return mux
 }
 
