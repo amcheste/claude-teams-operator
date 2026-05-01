@@ -49,7 +49,9 @@ rules:
 - apiGroups:
   - claude.amcheste.io
   resources:
+  - agentteamruns
   - agentteams
+  - agentteamtemplates
   verbs:
   - create
   - delete
@@ -61,13 +63,17 @@ rules:
 - apiGroups:
   - claude.amcheste.io
   resources:
+  - agentteamruns/finalizers
   - agentteams/finalizers
+  - agentteamtemplates/finalizers
   verbs:
   - update
 - apiGroups:
   - claude.amcheste.io
   resources:
+  - agentteamruns/status
   - agentteams/status
+  - agentteamtemplates/status
   verbs:
   - get
   - patch

@@ -17,33 +17,41 @@ spec:
       labels:
         app.kubernetes.io/name: claude-teams-operator
         app.kubernetes.io/instance: {{ .Release.Name }}
+      annotations:
+        # Roll the pod when the operator-flags ConfigMap changes so config
+        # edits without a chart upgrade still pick up.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
       {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ .Values.serviceAccount.name }}
       {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: manager
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           args:
             - --metrics-bind-address=:{{ .Values.metrics.port }}
             - --health-probe-bind-address=:{{ .Values.healthProbe.port }}
             {{- if .Values.leaderElection.enabled }}
             - --leader-elect
             {{- end }}
-          env:
-            - name: CLAUDE_CODE_IMAGE
-              value: "{{ .Values.claudeCodeImage.repository }}:{{ .Values.claudeCodeImage.tag }}"
-            - name: DEFAULT_STORAGE_CLASS
-              value: "{{ .Values.storage.storageClassName }}"
-            - name: DEFAULT_TEAM_STATE_SIZE
-              value: "{{ .Values.storage.teamStateSize }}"
-            - name: DEFAULT_REPO_SIZE
-              value: "{{ .Values.storage.repoSize }}"
-            - name: DEFAULT_BUDGET_LIMIT
-              value: "{{ .Values.defaultBudgetLimit }}"
-            - name: DEFAULT_TIMEOUT
-              value: "{{ .Values.defaultTimeout }}"
+            {{- with .Values.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-config
           ports:
             - name: metrics
               containerPort: {{ .Values.metrics.port }}

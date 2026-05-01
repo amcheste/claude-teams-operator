@@ -298,7 +298,8 @@ This README is the entry point. For deeper dives, every topic lives in a dedicat
 |----------|-----------------------|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Understand how the operator models Agent Teams — phase state machine, PVC layout, RWX storage backends, coordination protocol, key design tradeoffs. |
 | [TESTING.md](TESTING.md) | See the test strategy (unit / integration / acceptance / E2E), how to run each suite, and what each one actually verifies. |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Set up a dev environment, run the full build/test loop, and follow the branch + PR workflow. |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Set up a dev environment, run the full build/test loop, follow the branch + PR workflow, and walk through "How to add a new reconciler feature." |
+| [docs/helm-values.md](docs/helm-values.md) | Tune the Helm chart — every value documented with defaults and production override recipes. |
 | [SECURITY.md](SECURITY.md) | Report a vulnerability or review the project's security policy. |
 | [KUBECON.md](KUBECON.md) | See the talk framing and "interesting problems" log — useful context for why specific architectural choices were made. |
 

@@ -12,6 +12,11 @@ claudeCodeImage:
   tag: latest
   pullPolicy: IfNotPresent
 
+# Image pull secrets used for both the operator image and the agent runner
+# image. List of references — supply when pulling from a private registry.
+# Example: imagePullSecrets: [{name: ghcr-creds}]
+imagePullSecrets: []
+
 # Service account for the operator
 serviceAccount:
   create: true
@@ -90,3 +95,40 @@ tolerations: []
 
 # Affinity for operator pod
 affinity: {}
+
+# Pod-level security context. Defaults to a hardened profile: non-root user,
+# no privilege escalation, dropped capabilities. Override only when a
+# specific cluster policy requires it.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container-level security context. Read-only root filesystem prevents the
+# operator from writing anywhere outside its cache/temp dirs; capabilities
+# are dropped because the operator's only network needs are outbound HTTP
+# to the K8s API.
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Extra args appended to the operator's command line. Use to flip
+# experimental flags without re-building an image.
+# Example: extraArgs: ["--zap-log-level=debug"]
+extraArgs: []
+
+# Extra environment variables merged into the operator-config ConfigMap.
+# Anything you put here is exposed to the operator via envFrom and visible
+# in `kubectl describe configmap <release>-config`.
+# Example: extraEnv: { CUSTOM_FLAG: "value" }
+extraEnv: {}
+
+# Annotations applied to the operator pod template (in addition to the
+# config-checksum annotation the chart manages).
+podAnnotations: {}
