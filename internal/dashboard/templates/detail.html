@@ -4,9 +4,9 @@
   <a href="/" class="text-sm text-slate-500 hover:text-slate-900">← All teams</a>
 </div>
 
-<div hx-get="/api/htmx/teams/{{.Namespace}}/{{.Name}}"
-     hx-trigger="every 5s"
-     hx-swap="outerHTML">
+<div hx-ext="sse"
+     sse-connect="/api/teams/{{.Namespace}}/{{.Name}}/events"
+     sse-swap="update">
   {{template "detail_body" .}}
 </div>
 {{end}}

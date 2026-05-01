@@ -64,6 +64,15 @@ func (s *Server) Routes() http.Handler {
 	// the polling swaps don't reload the entire page.
 	mux.HandleFunc("/api/htmx/teams", s.htmxListRows)
 	mux.HandleFunc("/api/htmx/teams/", s.htmxDetailBody)
+
+	// Server-Sent Events. Both endpoints emit fragment HTML on state
+	// changes — HTMX's sse extension renders them via sse-swap. The
+	// detail SSE handler is registered on /api/teams/ and dispatches
+	// internally, sharing prefix space with the JSON detail/log routes.
+	mux.HandleFunc("/api/htmx/teams/sse", s.sseListHandler)
+	// detail SSE matches /api/teams/{ns}/{name}/events; routeTeamDetail
+	// already owns /api/teams/, so the SSE path is dispatched from inside
+	// it via routeTeamDetail's path-parts switch.
 	return mux
 }
 
@@ -115,14 +124,21 @@ func (s *Server) routeTeamDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Trim "/api/teams/" prefix and split — expecting either:
+	// Trim "/api/teams/" prefix and split — expecting one of:
 	//   {ns}/{name}                     → team detail
+	//   {ns}/{name}/events              → SSE state stream
 	//   {ns}/{name}/logs/{agent}        → pod log stream
 	rest := strings.TrimPrefix(r.URL.Path, "/api/teams/")
 	parts := strings.Split(strings.Trim(rest, "/"), "/")
 	switch len(parts) {
 	case 2:
 		s.teamDetail(w, r, parts[0], parts[1])
+	case 3:
+		if parts[2] != "events" {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		s.sseDetailHandler(w, r)
 	case 4:
 		if parts[2] != "logs" {
 			writeError(w, http.StatusNotFound, "not found")

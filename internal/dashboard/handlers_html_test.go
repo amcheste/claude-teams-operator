@@ -68,9 +68,10 @@ func TestRouteRoot_RendersListPage(t *testing.T) {
 	// Layout chrome
 	assert.Contains(t, body, "claude-teams-operator")
 	assert.Contains(t, body, "Agent Teams")
-	// HTMX polling on the tbody
-	assert.Contains(t, body, `hx-get="/api/htmx/teams"`)
-	assert.Contains(t, body, `hx-trigger="every 5s"`)
+	// SSE wiring on the tbody (replaced 5s polling in #139)
+	assert.Contains(t, body, `hx-ext="sse"`)
+	assert.Contains(t, body, `sse-connect="/api/htmx/teams/sse"`)
+	assert.Contains(t, body, `sse-swap="update"`)
 	// Team data rendered
 	assert.Contains(t, body, "alpha")
 	assert.Contains(t, body, "ns1")
@@ -114,8 +115,9 @@ func TestRouteDetail_RendersDetailPage(t *testing.T) {
 	assert.Contains(t, body, "alpha")
 	assert.Contains(t, body, "ns1/alpha")
 
-	// HTMX swap on detail body
-	assert.Contains(t, body, `hx-get="/api/htmx/teams/ns1/alpha"`)
+	// SSE wiring on the detail body wrapper (replaced 5s polling in #139)
+	assert.Contains(t, body, `hx-ext="sse"`)
+	assert.Contains(t, body, `sse-connect="/api/teams/ns1/alpha/events"`)
 
 	// Teammates table populated
 	assert.Contains(t, body, "reviewer")
