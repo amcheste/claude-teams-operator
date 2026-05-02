@@ -1,5 +1,7 @@
-# KubeCon NA 2026 — CFP Draft
+# KubeCon NA 2026 — kagents CFP Draft
 
+> **Project:** **kagents** ([kagents.dev](https://kagents.dev)) — implementation in [`claude-teams-operator`](https://github.com/amcheste/claude-teams-operator).
+>
 > Draft submission for issue [#23](https://github.com/amcheste/claude-teams-operator/issues/23). Conference: KubeCon + CloudNativeCon North America 2026, Salt Lake City, Nov 9–12. CFP deadline: **May 31, 2026 at 11:59pm MT**. Submit at https://sessionize.com/kubecon-cloudnativecon-north-america-2026/.
 >
 > This is a starting draft. Every field below is meant to be edited. Open questions for the maintainer are listed at the bottom.
@@ -46,7 +48,7 @@ The Operator Pattern for Multi-Agent Coding Teams
 
 ## Abstract (1,300 char max)
 
-> Most multi-agent orchestration frameworks treat Kubernetes as deployment infrastructure: pods that happen to run an LLM. This talk shows what changes when the cluster becomes the coordination fabric. The claude-teams-operator runs Anthropic's Claude Code Agent Teams as a CRD-driven workload, preserving the native file-based mailbox protocol over a ReadWriteMany PVC instead of inventing a new one. An AgentTeam resource declares a lead, teammates, budget, quality gates, and lifecycle policy in a single spec. The reconciler provisions per-teammate git worktrees, scopes each pod with its own ServiceAccount, and re-spawns crashed agents using the durable task list as recovery state. The agent does not remember the conversation, but the task list on the PVC tells the fresh pod what work remains. The talk walks through the architectural choices that made this work in K8s: why agent state lives on a PVC instead of a CRD status field, why RestartPolicy is Never, what RWX storage you actually need in production versus on a laptop, and how Prometheus metrics, webhooks, and human approval gates plug into the reconcile loop. A live demo deploys a coding team to a Kind cluster, shows mailbox traffic between pods, kills a teammate, and watches the operator respawn it from the task list.
+> Most multi-agent orchestration frameworks treat Kubernetes as deployment infrastructure: pods that happen to run an LLM. This talk shows what changes when the cluster becomes the coordination fabric. **kagents** ([kagents.dev](https://kagents.dev)) runs Anthropic's Claude Code Agent Teams as a CRD-driven workload, preserving the native file-based mailbox protocol over a ReadWriteMany PVC instead of inventing a new one. An AgentTeam resource declares a lead, teammates, budget, quality gates, and lifecycle policy in a single spec. The reconciler provisions per-teammate git worktrees, scopes each pod with its own ServiceAccount, and re-spawns crashed agents using the durable task list as recovery state. The agent does not remember the conversation, but the task list on the PVC tells the fresh pod what work remains. The talk walks through the architectural choices that made this work in K8s: why agent state lives on a PVC instead of a CRD status field, why RestartPolicy is Never, what RWX storage you actually need in production versus on a laptop, and how Prometheus metrics, webhooks, and human approval gates plug into the reconcile loop. A live demo deploys a coding team to a Kind cluster, shows mailbox traffic between pods, kills a teammate, and watches the operator respawn it from the task list.
 
 (~1,290 characters, against a 1,300 limit. The buffer is small. Trim if any field is added during iteration.)
 
@@ -68,7 +70,7 @@ The Operator Pattern for Multi-Agent Coding Teams
 
 ## Open source projects discussed
 
-- [claude-teams-operator](https://github.com/amcheste/claude-teams-operator) — the operator itself (Apache 2.0)
+- **kagents** ([kagents.dev](https://kagents.dev)) — the operator itself, Apache 2.0; implementation at [claude-teams-operator](https://github.com/amcheste/claude-teams-operator)
 - [Kubernetes](https://github.com/kubernetes/kubernetes) — the platform; specifically `controller-runtime`, `kubebuilder`, RBAC, PVC subsystem
 - [Prometheus](https://github.com/prometheus/prometheus) and [Grafana](https://github.com/grafana/grafana) — metrics scraping and the published dashboard ConfigMap
 - [Helm](https://github.com/helm/helm) — chart packaging and release distribution
