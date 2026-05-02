@@ -75,7 +75,13 @@ markdown_extensions:
       pygments_lang_class: true
   - pymdownx.inlinehilite
   - pymdownx.snippets
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        # Mermaid diagrams. Material has built-in renderer support; this
+        # routes ```mermaid fences through it.
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.tabbed:
       alternate_style: true
 
@@ -98,3 +104,6 @@ nav:
       - reference/index.md
   - Explanation:
       - explanation/index.md
+      - Resource model: explanation/resources.md
+      - Coordination protocol: explanation/coordination.md
+      - Operations: explanation/operations.md
