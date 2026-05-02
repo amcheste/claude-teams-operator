@@ -2,7 +2,7 @@
 
 **Conference:** KubeCon + CloudNativeCon North America 2026
 **Dates:** November 9–12, 2026 — Salt Lake City, Utah
-**CFP:** Expected to open May/June 2026. Watch https://events.linuxfoundation.org/kubecon-cloudnativecon-north-america/
+**CFP:** Open now — deadline **May 31, 2026 at 11:59pm MT**. Submit at https://events.linuxfoundation.org/kubecon-cloudnativecon-north-america/program/cfp/
 
 ---
 
