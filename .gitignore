@@ -30,5 +30,8 @@ Thumbs.db
 # Build
 dist/
 
+# mkdocs build output
+site/
+
 # Kind
 kubeconfig
