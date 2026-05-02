@@ -53,5 +53,25 @@ Metrics ServiceMonitor is OFF. Enable with:
     --set metrics.serviceMonitor.enabled=true
 
 {{- end }}
+{{- if .Values.dashboard.enabled }}
+
+Dashboard enabled — open the UI with:
+  kubectl port-forward -n {{ .Release.Namespace }} \
+    svc/{{ .Release.Name }}-dashboard {{ .Values.dashboard.service.port }}:{{ .Values.dashboard.service.port }}
+  open http://localhost:{{ .Values.dashboard.service.port }}/
+
+{{- if .Values.dashboard.ingress.enabled }}
+Ingress is enabled — the dashboard is also reachable at:
+{{- range .Values.dashboard.ingress.hosts }}
+  http://{{ .host }}/
+{{- end }}
+{{- end }}
+{{- else }}
+
+Dashboard is OFF. Enable with:
+  helm upgrade {{ .Release.Name }} ./charts/claude-teams-operator \
+    --set dashboard.enabled=true
+
+{{- end }}
 
 Docs: https://github.com/amcheste/claude-teams-operator
