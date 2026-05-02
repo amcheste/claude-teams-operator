@@ -83,3 +83,18 @@ extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/amcheste/claude-teams-operator
+
+# Diátaxis nav: Tutorials (learn) / How-to (solve) / Reference (look up) /
+# Explanation (understand). Section index pages exist as placeholders so
+# the structure is in place even before all content lands.
+nav:
+  - Home: index.md
+  - Tutorials:
+      - tutorials/index.md
+      - Getting started: tutorials/getting-started.md
+  - How-to guides:
+      - how-to/index.md
+  - Reference:
+      - reference/index.md
+  - Explanation:
+      - explanation/index.md
