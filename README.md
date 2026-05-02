@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="assets/logo.png" alt="claude-teams-operator mascot" width="200" />
+<img src="assets/logo.png" alt="kagents mascot" width="200" />
 
-# claude-teams-operator
+# kagents
 
-**A Kubernetes operator that runs Claude Code Agent Teams as distributed pods.**
+**Run Claude Code Agent Teams as a Kubernetes operator.**
 
 [![Validate](https://github.com/amcheste/claude-teams-operator/actions/workflows/validate.yml/badge.svg)](https://github.com/amcheste/claude-teams-operator/actions/workflows/validate.yml)
 [![Version](https://img.shields.io/github/v/tag/amcheste/claude-teams-operator?label=version&sort=semver)](https://github.com/amcheste/claude-teams-operator/releases)
@@ -14,6 +14,8 @@
 </div>
 
 ---
+
+> **kagents** is the project brand. The implementation lives in the [`claude-teams-operator`](https://github.com/amcheste/claude-teams-operator) repository and ships under the `claude.amcheste.io/v1alpha1` API group. Documentation site: [kagents.dev](https://kagents.dev) (under construction — see [v0.7.0 milestone](https://github.com/amcheste/claude-teams-operator/milestone/8)).
 
 Claude Code [Agent Teams](https://docs.anthropic.com/en/docs/claude-code/agent-teams) let multiple Claude Code instances collaborate — a lead coordinates work via a shared task list while teammates communicate through peer-to-peer mailboxes. Natively this runs on a single machine using tmux. This operator lifts that pattern into Kubernetes so you can run large-scale agent teams on your cluster.
 
