@@ -1,0 +1,17 @@
+{{define "list_rows"}}
+{{range .}}
+<tr class="border-t border-slate-100 hover:bg-slate-50">
+  <td class="px-4 py-2 font-mono text-xs text-slate-600">{{.Namespace}}</td>
+  <td class="px-4 py-2"><a class="text-blue-700 hover:underline" href="/teams/{{.Namespace}}/{{.Name}}">{{.Name}}</a></td>
+  <td class="px-4 py-2"><span class="phase-{{.Status.Phase}} px-2 py-0.5 rounded text-xs font-medium">{{or .Status.Phase "Pending"}}</span></td>
+  <td class="px-4 py-2 text-slate-600">{{or .Status.Ready "—"}}</td>
+  <td class="px-4 py-2 text-slate-600">{{if .Status.Tasks}}{{.Status.Tasks.Completed}} / {{.Status.Tasks.Total}}{{else}}—{{end}}</td>
+  <td class="px-4 py-2 text-slate-600">{{if .Status.EstimatedCost}}${{.Status.EstimatedCost}}{{else}}—{{end}}</td>
+  <td class="px-4 py-2 text-xs text-slate-500">{{.CreationTimestamp.Format "Jan 2 15:04"}}</td>
+</tr>
+{{else}}
+<tr>
+  <td colspan="7" class="px-4 py-6 text-center text-slate-500">No AgentTeams.</td>
+</tr>
+{{end}}
+{{end}}

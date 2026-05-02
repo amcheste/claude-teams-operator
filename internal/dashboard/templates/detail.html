@@ -1,0 +1,13 @@
+{{define "content"}}
+{{with .Data}}
+<div class="mb-6">
+  <a href="/" class="text-sm text-slate-500 hover:text-slate-900">← All teams</a>
+</div>
+
+<div hx-ext="sse"
+     sse-connect="/api/teams/{{.Namespace}}/{{.Name}}/events"
+     sse-swap="update">
+  {{template "detail_body" .}}
+</div>
+{{end}}
+{{end}}

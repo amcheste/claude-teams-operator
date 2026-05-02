@@ -132,3 +132,82 @@ extraEnv: {}
 # Annotations applied to the operator pod template (in addition to the
 # config-checksum annotation the chart manages).
 podAnnotations: {}
+
+# Operator dashboard (web UI). Off by default — installing the chart
+# alone gives you the controller-manager and CRDs; flip dashboard.enabled
+# to deploy the read-only HTMX dashboard alongside it.
+#
+# The dashboard runs in its own pod with its own ServiceAccount. RBAC is
+# scoped to read-only verbs on AgentTeam CRs, Pods, and Pods/log — it
+# never mutates cluster state. Cluster-wide vs single-namespace scope is
+# controlled by `dashboard.namespace` below.
+dashboard:
+  enabled: false
+
+  image:
+    repository: ghcr.io/amcheste/claude-teams-dashboard
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  replicaCount: 1
+
+  # Namespace to scope the dashboard to. Empty means cluster-wide (a
+  # ClusterRoleBinding grants read access to every namespace). Set to a
+  # single namespace to restrict via a RoleBinding instead. The same
+  # value is also passed to the dashboard binary as `--namespace=...` so
+  # the UI lists only teams from that namespace.
+  namespace: ""
+
+  serviceAccount:
+    create: true
+    name: claude-teams-dashboard
+
+  service:
+    type: ClusterIP
+    port: 8080
+
+  # Ingress for exposing the dashboard outside the cluster. Off by
+  # default — most users expose it via `kubectl port-forward` or a
+  # platform-specific ingress they manage themselves.
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: claude-teams.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+  # Hardened pod-level security context. Mirrors the operator's defaults.
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+
+  # Container-level hardening. Read-only root FS — the dashboard never
+  # writes to disk. Capabilities dropped because outbound HTTP to the K8s
+  # API is the only network need.
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
