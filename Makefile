@@ -2,6 +2,7 @@
 
 IMG ?= ghcr.io/amcheste/claude-teams-operator:latest
 CLAUDE_CODE_IMG ?= ghcr.io/amcheste/claude-code-runner:latest
+DASHBOARD_IMG ?= ghcr.io/amcheste/claude-teams-dashboard:latest
 KIND_CLUSTER_NAME ?= claude-teams
 
 # Tool versions
@@ -64,6 +65,10 @@ docker-build: ## Build operator Docker image
 docker-build-runner: ## Build Claude Code runner Docker image
 	docker build -t $(CLAUDE_CODE_IMG) -f docker/Dockerfile.claude-code .
 
+.PHONY: docker-build-dashboard
+docker-build-dashboard: ## Build dashboard web UI Docker image
+	docker build -t $(DASHBOARD_IMG) -f docker/Dockerfile.dashboard .
+
 .PHONY: docker-push
 docker-push: ## Push operator image
 	docker push $(IMG)
@@ -79,9 +84,10 @@ kind-delete: ## Delete Kind cluster
 	kind delete cluster --name $(KIND_CLUSTER_NAME)
 
 .PHONY: kind-load
-kind-load: docker-build docker-build-runner ## Load images into Kind
+kind-load: docker-build docker-build-runner docker-build-dashboard ## Load images into Kind
 	kind load docker-image $(IMG) --name $(KIND_CLUSTER_NAME)
 	kind load docker-image $(CLAUDE_CODE_IMG) --name $(KIND_CLUSTER_NAME)
+	kind load docker-image $(DASHBOARD_IMG) --name $(KIND_CLUSTER_NAME)
 
 ##@ Deployment
 
