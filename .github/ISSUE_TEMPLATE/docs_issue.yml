@@ -1,0 +1,42 @@
+name: Documentation Issue
+description: Something on https://kagents.dev (or in-repo docs) is wrong, missing, confusing, or out of date.
+labels: [documentation]
+body:
+  - type: dropdown
+    id: location
+    attributes:
+      label: Where did you encounter this?
+      options:
+        - kagents.dev (docs site)
+        - README.md
+        - ARCHITECTURE.md
+        - CONTRIBUTING.md
+        - In-repo docs (docs/ tree)
+        - kubectl explain output (CRD docstring)
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: page
+    attributes:
+      label: Page or section
+      placeholder: e.g. https://kagents.dev/tutorials/getting-started/ or "Resource model > AgentTeamRun"
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's wrong?
+      description: Describe the issue. Wrong instruction? Stale info? Confusing wording? Missing example?
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Proposed fix (optional)
+      description: If you have a specific suggestion — wording, an example, a diagram — share it here. PRs welcome too.
+    validations:
+      required: false

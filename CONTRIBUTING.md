@@ -1,5 +1,42 @@
 # Contributing
 
+Thank you for considering a contribution to **kagents** (the [`claude-teams-operator`](https://github.com/amcheste/claude-teams-operator) repo). This guide covers everything from setting up your dev environment to opening your first PR.
+
+If you're new here, the fastest orientation:
+
+1. Read the [Getting Started tutorial](https://kagents.dev/tutorials/getting-started/) to install kagents on a Kind cluster and run a team end-to-end (~15 minutes)
+2. Read the [Resource model](https://kagents.dev/explanation/resources/) and [Coordination protocol](https://kagents.dev/explanation/coordination/) explanation pages to understand the architecture
+3. Skim this guide
+4. Check the [good first issues](https://github.com/amcheste/claude-teams-operator/labels/good%20first%20issue) below for something to pick up
+
+## Code of Conduct
+
+This project adopts the [Contributor Covenant Code of Conduct, version 2.1](CODE_OF_CONDUCT.md). By participating you agree to abide by it. Report violations confidentially per the instructions in that file.
+
+## Issue tracking
+
+This project uses **Linear** (team `AMC`, project `claude-teams-operator`) as the source of truth for issue tracking. Linear ↔ GitHub sync mirrors issues both ways: a Linear issue gets a GitHub mirror, and a PR that references the Linear ID (`Fixes AMC-N` in the PR body or any commit message) auto-closes the Linear ticket on merge.
+
+For external contributors who don't have Linear access:
+
+- File issues directly on GitHub using the [issue templates](https://github.com/amcheste/claude-teams-operator/issues/new/choose). The maintainer will mirror them into Linear.
+- Reference the GitHub issue number in your PR (`Fixes #123`) — that works fine. The Linear sync handles the cross-reference.
+
+For maintainers and regular contributors:
+
+- Open or claim issues in Linear directly via [save_issue](https://linear.app/amcheste/project/claude-teams-operator-32aab082f36b) (or the Linear UI).
+- PRs to `develop` are required to reference an `AMC-N` ID or carry a `No-Linear-Issue: <reason>` trailer — the `Linear Issue Reference` CI check enforces this.
+
+## Good first issues
+
+If you're looking for a way in, browse:
+
+- [`good first issue`](https://github.com/amcheste/claude-teams-operator/labels/good%20first%20issue) — small, well-scoped tasks with clear acceptance criteria
+- [`help wanted`](https://github.com/amcheste/claude-teams-operator/labels/help%20wanted) — areas where the maintainer would specifically welcome a hand
+- [`documentation`](https://github.com/amcheste/claude-teams-operator/labels/documentation) — content fixes, new tutorials, or how-to guides for the docs site at [kagents.dev](https://kagents.dev)
+
+If nothing on those lists fits, [open a Discussion](https://github.com/amcheste/claude-teams-operator/discussions) describing what you'd like to work on. Better to align before writing code than after.
+
 ## Prerequisites
 
 - **Go 1.23+** — `brew install go` or [go.dev/dl](https://go.dev/dl)
@@ -121,6 +158,25 @@ make manifests generate fmt vet test
 ```
 
 All must pass. CI will re-run them.
+
+If your PR touches `api/v1alpha1/*.go`, also run:
+
+```bash
+make docs-api
+```
+
+This regenerates the auto-generated API reference at `docs/reference/api/index.md`. CI's `Check API reference docs are up to date` step fails if you skip this.
+
+### Documentation site changes
+
+The docs site at [kagents.dev](https://kagents.dev) lives under `docs/` and is built with [mkdocs-material](https://squidfunk.github.io/mkdocs-material/). To preview your changes locally:
+
+```bash
+pip install -r docs/requirements.txt
+mkdocs serve  # http://localhost:8000
+```
+
+The site auto-deploys to `gh-pages` on every push to `main` that touches `docs/`, `mkdocs.yml`, or `.github/workflows/docs.yml`. See [`docs/README.md`](docs/README.md) for the dev loop.
 
 ---
 
