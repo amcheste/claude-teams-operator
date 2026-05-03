@@ -110,6 +110,7 @@ nav:
           - Set budget alerts: how-to/operate/budget-alerts.md
   - Reference:
       - reference/index.md
+      - API reference: reference/api/index.md
   - Explanation:
       - explanation/index.md
       - Resource model: explanation/resources.md
