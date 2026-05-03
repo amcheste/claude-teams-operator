@@ -181,7 +181,8 @@ CRD_REF_DOCS_VERSION ?= v0.3.0
 CRD_REF_DOCS = $(shell go env GOPATH)/bin/crd-ref-docs
 .PHONY: crd-ref-docs
 crd-ref-docs: ## Install crd-ref-docs (used by docs-api)
-	@test -f $(CRD_REF_DOCS) || go install github.com/elastic/crd-ref-docs@$(CRD_REF_DOCS_VERSION)
+	@go install github.com/elastic/crd-ref-docs@$(CRD_REF_DOCS_VERSION)
+
 
 ##@ Documentation
 
