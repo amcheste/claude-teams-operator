@@ -100,6 +100,14 @@ nav:
       - Getting started: tutorials/getting-started.md
   - How-to guides:
       - how-to/index.md
+      - Install:
+          - On Amazon EKS: how-to/install/eks.md
+          - On Google GKE: how-to/install/gke.md
+          - On Azure AKS: how-to/install/aks.md
+      - Operate:
+          - Expose the dashboard: how-to/operate/expose-dashboard.md
+          - Configure shared storage: how-to/operate/shared-storage.md
+          - Set budget alerts: how-to/operate/budget-alerts.md
   - Reference:
       - reference/index.md
   - Explanation:
