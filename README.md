@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/logo.png" alt="kagents mascot" width="200" />
+<img src="assets/banner.png" alt="kagents banner" width="800" />
 
 # kagents
 
