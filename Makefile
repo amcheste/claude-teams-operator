@@ -176,3 +176,22 @@ CONTROLLER_GEN = $(shell go env GOPATH)/bin/controller-gen
 .PHONY: controller-gen
 controller-gen: ## Install controller-gen
 	@test -f $(CONTROLLER_GEN) || go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION)
+
+CRD_REF_DOCS_VERSION ?= v0.3.0
+CRD_REF_DOCS = $(shell go env GOPATH)/bin/crd-ref-docs
+.PHONY: crd-ref-docs
+crd-ref-docs: ## Install crd-ref-docs (used by docs-api)
+	@test -f $(CRD_REF_DOCS) || go install github.com/elastic/crd-ref-docs@$(CRD_REF_DOCS_VERSION)
+
+##@ Documentation
+
+.PHONY: docs-api
+docs-api: crd-ref-docs ## Regenerate the API reference under docs/reference/api/ from kubebuilder markers
+	@mkdir -p docs/reference/api
+	$(CRD_REF_DOCS) \
+		--config=hack/crd-ref-docs-config.yaml \
+		--source-path=api/v1alpha1 \
+		--renderer=markdown \
+		--output-path=docs/reference/api/index.md \
+		--output-mode=single
+	@echo "API reference regenerated at docs/reference/api/index.md"

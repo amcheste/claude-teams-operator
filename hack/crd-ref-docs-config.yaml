@@ -1,0 +1,18 @@
+# Configuration for crd-ref-docs (https://github.com/elastic/crd-ref-docs).
+# Used by `make docs-api` to regenerate docs/reference/api/ from the
+# kubebuilder markers in api/v1alpha1/.
+
+processor:
+  # No type-level ignores — the v0.7.0 reference docs aim to be
+  # comprehensive. Each spec, status, and embedded helper type gets a
+  # section. Add an `ignoreTypes` regex here only if a type genuinely
+  # shouldn't be in the public API surface.
+  # `List` suffix types are kubebuilder-generated pagination wrappers
+  # used only by client-go callers — not part of the user-facing API.
+  ignoreTypes:
+    - "List$"
+  ignoreFields:
+    - "TypeMeta$"
+
+render:
+  kubernetesVersion: "1.31"
