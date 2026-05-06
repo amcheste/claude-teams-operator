@@ -7,8 +7,8 @@
 **Run Claude Code Agent Teams as a Kubernetes operator.**
 
 [![Validate](https://github.com/amcheste/claude-teams-operator/actions/workflows/validate.yml/badge.svg)](https://github.com/amcheste/claude-teams-operator/actions/workflows/validate.yml)
-[![Version](https://img.shields.io/github/v/tag/amcheste/claude-teams-operator?label=version&sort=semver)](https://github.com/amcheste/claude-teams-operator/releases)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/github/v/tag/amcheste/claude-teams-operator?label=version&sort=semver&color=0B0B0C)](https://github.com/amcheste/claude-teams-operator/releases)
+[![License](https://img.shields.io/badge/License-Apache_2.0-1F4D3A.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.23-00ADD8)](go.mod)
 
 </div>
