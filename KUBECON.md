@@ -3,7 +3,7 @@
 **Project:** **kagents** — run Claude Code Agent Teams as a Kubernetes operator. Site: [kagents.dev](https://kagents.dev) (in progress). Repo: [`claude-teams-operator`](https://github.com/amcheste/claude-teams-operator).
 **Conference:** KubeCon + CloudNativeCon North America 2026
 **Dates:** November 9–12, 2026 — Salt Lake City, Utah
-**CFP:** Open now — deadline **May 31, 2026 at 11:59pm MT**. Submit at https://events.linuxfoundation.org/kubecon-cloudnativecon-north-america/program/cfp/
+**CFP:** Submitted (May 2026) — deadline was **May 31, 2026 at 11:59pm MT**.
 
 ---
 
