@@ -1494,7 +1494,7 @@ func (r *AgentTeamReconciler) executeOnComplete(ctx context.Context, team *claud
 	case "create-pr":
 		if err := r.executeCreatePR(ctx, team); err != nil {
 			log.Error(err, "create-pr failed")
-			r.recordEvent(team, corev1.EventTypeWarning, "PRCreationFailed", err.Error())
+			r.recordEvent(team, corev1.EventTypeWarning, "PRCreationFailed", "%v", err)
 			return err
 		}
 	case "push-branch":
