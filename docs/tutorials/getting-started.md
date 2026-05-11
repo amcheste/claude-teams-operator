@@ -6,7 +6,7 @@ This tutorial walks you from a fresh laptop to a running AgentTeam in about 15 m
 - A small Cowork-mode AgentTeam that researches a topic and writes a summary file
 - The know-how to inspect what's happening with `kubectl` and the dashboard
 
-You don't need any cloud accounts or external services — everything runs on your laptop.
+You don't need any cloud accounts or external services. Everything runs on your laptop.
 
 ## Prerequisites
 
@@ -31,7 +31,7 @@ cd claude-teams-operator
 make kind-create
 ```
 
-This creates a Kind cluster named `claude-teams` with a local-path storage class aliased as `nfs`. On a single-node cluster every pod runs on the same node, so a hostPath volume is visible to all pods — that's our RWX-equivalent for laptop testing.
+This creates a Kind cluster named `claude-teams` with a local-path storage class aliased as `nfs`. On a single-node cluster every pod runs on the same node, so a hostPath volume is visible to all pods. That's our RWX-equivalent for laptop testing.
 
 !!! note "Production deployments need a real RWX backend"
     For real multi-node clusters you'll need NFS, EFS, Filestore, or Azure Files. The Kind setup is a single-node convenience, not the production story. See the *Concept: file-based mailbox protocol* page (coming in v0.7.0) for why.
@@ -77,7 +77,7 @@ Replace `sk-ant-...` with your actual key from [console.anthropic.com](https://c
 
 ## 4. Apply your first AgentTeam
 
-This is a small Cowork-mode team — no git repo, just an output volume. The lead coordinates a single writer agent that produces a Markdown file.
+This is a small Cowork-mode team. No git repo, just an output volume. The lead coordinates a single writer agent that produces a Markdown file.
 
 ```yaml title="hello-team.yaml"
 apiVersion: claude.amcheste.io/v1alpha1
@@ -185,18 +185,18 @@ make kind-delete
 
 ## What you just did
 
-A real Kubernetes operator just orchestrated two Claude Code instances communicating via a shared filesystem to produce real output, with K8s primitives doing the coordination work — RWX PVC for the mailbox, ServiceAccounts for per-agent identity, owner references for cleanup. No custom protocol, no orchestrator service, no daemon outside the cluster.
+A real Kubernetes operator just orchestrated two Claude Code instances communicating via a shared filesystem to produce real output, with K8s primitives doing the coordination work. RWX PVC for the mailbox, ServiceAccounts for per-agent identity, owner references for cleanup. No custom protocol, no orchestrator service, no daemon outside the cluster.
 
 ## Where to go next
 
-- **[How-to guides](../how-to/index.md)** — install on a real cloud, expose the dashboard, set budget alerts
-- **[Reference](../reference/index.md)** — every CRD field and Helm value documented
-- **[Explanation](../explanation/index.md)** — how the file-based mailbox protocol actually works under the hood
+- **[How-to guides](../how-to/index.md)**. Install on a real cloud, expose the dashboard, set budget alerts
+- **[Reference](../reference/index.md)**. Every CRD field and Helm value documented
+- **[Explanation](../explanation/index.md)**. How the file-based mailbox protocol actually works under the hood
 
 ## Common errors
 
 ??? warning "`PVCs stuck in Pending`"
-    The operator requires a ReadWriteMany-capable StorageClass. On a Kind cluster, `make kind-create` sets one up under the alias `nfs`. If you're using your own cluster, check `kubectl get sc` — there must be one named `nfs` (or you need to pass `--set storage.storageClassName=<your-sc>` when installing the chart).
+    The operator requires a ReadWriteMany-capable StorageClass. On a Kind cluster, `make kind-create` sets one up under the alias `nfs`. If you're using your own cluster, check `kubectl get sc`. There must be one named `nfs` (or you need to pass `--set storage.storageClassName=<your-sc>` when installing the chart).
 
 ??? warning "`Pod stuck in CrashLoopBackOff`"
     Check the agent pod logs: `kubectl logs -n dev-agents hello-team-writer`. The most common cause is a missing or invalid Anthropic API key. Re-create the Secret with `kubectl create secret generic anthropic-api-key --namespace dev-agents --from-literal=ANTHROPIC_API_KEY=... --dry-run=client -o yaml | kubectl apply -f -`.

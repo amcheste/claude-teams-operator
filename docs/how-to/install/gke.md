@@ -8,7 +8,7 @@ This guide walks you from a working GKE cluster to a running kagents operator ba
 - `kubectl` configured against the cluster
 - `helm` 3.14+
 - `gcloud` CLI authenticated with the project that owns the cluster
-- The cluster's VPC network and region — `gcloud container clusters describe <cluster-name>` shows them
+- The cluster's VPC network and region. `gcloud container clusters describe <cluster-name>` shows them
 
 ## 1. Enable the Filestore CSI driver
 
@@ -30,7 +30,7 @@ kubectl get pods -n kube-system -l k8s-app=gcp-filestore-csi-driver
 
 ## 2. Create the StorageClass
 
-The driver supports dynamic provisioning, so you don't need to create a Filestore instance manually — the CSI driver creates one when the first PVC binds.
+The driver supports dynamic provisioning, so you don't need to create a Filestore instance manually. The CSI driver creates one when the first PVC binds.
 
 ```yaml title="storageclass-filestore.yaml"
 apiVersion: storage.k8s.io/v1
@@ -84,7 +84,7 @@ A passing run reports the effective StorageClass and AccessMode:
 PASS  StorageClass=nfs  AccessMode=ReadWriteMany  RoundTripMs=623
 ```
 
-The first `make mailbox-smoke-test` run on Filestore takes a few minutes — Filestore instance provisioning is the slow step (~3-5 min). Subsequent test runs reuse the instance and complete in under 30s.
+The first `make mailbox-smoke-test` run on Filestore takes a few minutes. Filestore instance provisioning is the slow step (~3-5 min). Subsequent test runs reuse the instance and complete in under 30s.
 
 ## Cost notes
 
@@ -94,7 +94,7 @@ Filestore is billed by provisioned capacity per hour, not actual usage:
 - **Premium tier (SSD)**: ~$0.30/GiB-month. Same 1 TiB minimum.
 - **Enterprise tier (HA, regional)**: ~$0.60/GiB-month. 2.5 TiB minimum.
 
-Note that **each PVC creates a new Filestore instance by default** with this StorageClass config. If you're running many teams, this gets expensive fast — at least one instance per PVC times the 1 TiB minimum.
+Note that **each PVC creates a new Filestore instance by default** with this StorageClass config. If you're running many teams, this gets expensive fast. At least one instance per PVC times the 1 TiB minimum.
 
 For multi-team production use, set `volumeHandle` on a manually-provisioned shared Filestore instance and use sub-directory provisioning instead. See [GKE's Filestore docs](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/filestore-csi-driver) for the multi-PVC pattern.
 
@@ -103,7 +103,7 @@ The honest range for a small production install with one shared Filestore instan
 ## Common gotchas
 
 ??? warning "PVC stuck in `Pending` with `does not satisfy capacity`"
-    Filestore instances have a 1 TiB minimum size. The kagents chart's default `storage.teamStateSize` is `5Gi`, but Filestore will round it up to the tier minimum. The PVC binds successfully — the warning resolves once provisioning completes (3-5 min).
+    Filestore instances have a 1 TiB minimum size. The kagents chart's default `storage.teamStateSize` is `5Gi`, but Filestore will round it up to the tier minimum. The PVC binds successfully. The warning resolves once provisioning completes (3-5 min).
 
 ??? warning "`failed to create filestore instance: insufficient quota`"
     Filestore instances count against a project-wide quota. `gcloud compute regions describe <region>` shows current usage. Request a quota increase via the GCP console.
@@ -116,6 +116,6 @@ The honest range for a small production install with one shared Filestore instan
 
 ## Where to look next
 
-- [Resource model](../../explanation/resources.md) — the CRDs you'll be writing
-- [Coordination protocol](../../explanation/coordination.md) — why RWX matters in detail
-- [Operations](../../explanation/operations.md) — budget, RBAC, observability for the running operator
+- [Resource model](../../explanation/resources.md). The CRDs you'll be writing
+- [Coordination protocol](../../explanation/coordination.md). Why RWX matters in detail
+- [Operations](../../explanation/operations.md). Budget, RBAC, observability for the running operator

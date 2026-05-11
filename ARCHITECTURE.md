@@ -86,20 +86,20 @@ This approach preserves the native Agent Teams protocol without modification whi
 
 ## Storage Requirements
 
-All operator-managed PVCs — `team-state`, `repo`, and (in Cowork mode) `output` — default to `ReadWriteMany` access on a StorageClass named `nfs`. The requirement is not incidental: the lead and every teammate pod must open the same mailbox and task files concurrently, and on a multi-node cluster they will generally land on different nodes. `ReadWriteOnce` can only bind to one node at a time, so it is not a viable default.
+All operator-managed PVCs. `team-state`, `repo`, and (in Cowork mode) `output`. Default to `ReadWriteMany` access on a StorageClass named `nfs`. The requirement is not incidental: the lead and every teammate pod must open the same mailbox and task files concurrently, and on a multi-node cluster they will generally land on different nodes. `ReadWriteOnce` can only bind to one node at a time, so it is not a viable default.
 
 ### Why ReadWriteMany
 
 Each agent pod does two concurrent things against shared state:
 
-- **Writing into peers' inboxes** — the lead writes `teams/{team}/inboxes/{teammate}.json`; each teammate writes to the lead's inbox and occasionally to other teammates'.
-- **Claiming tasks** — multiple teammates race to claim items from `tasks/{team}/tasks.json`.
+- **Writing into peers' inboxes**. The lead writes `teams/{team}/inboxes/{teammate}.json`; each teammate writes to the lead's inbox and occasionally to other teammates'.
+- **Claiming tasks**. Multiple teammates race to claim items from `tasks/{team}/tasks.json`.
 
 If the backing PVC cannot be mounted on more than one node, the second pod will fail to schedule (`volume already attached to a different node`) and the team deadlocks before the first mailbox round-trip.
 
 ### Supported storage backends
 
-The operator itself has no opinion about the CSI driver — it asks for a PVC with `accessModes: [ReadWriteMany]` and a `storageClassName` that you supply. The table below lists drivers known to satisfy the RWX contract:
+The operator itself has no opinion about the CSI driver. It asks for a PVC with `accessModes: [ReadWriteMany]` and a `storageClassName` that you supply. The table below lists drivers known to satisfy the RWX contract:
 
 | Platform | Driver | Notes |
 |----------|--------|-------|
@@ -114,11 +114,11 @@ The StorageClass name the operator requests defaults to `nfs` and is overridable
 
 ### Single-node fallback
 
-For laptops and CI — Kind, k3d, minikube — a full RWX provisioner is overkill. The operator accepts a `--pvc-access-mode=ReadWriteOnce` flag that switches every managed PVC from `ReadWriteMany` to `ReadWriteOnce`. This works **only** on single-node clusters, because every pod lands on the same node and a hostPath-backed RWO PVC is effectively visible to all of them.
+For laptops and CI. Kind, k3d, minikube. A full RWX provisioner is overkill. The operator accepts a `--pvc-access-mode=ReadWriteOnce` flag that switches every managed PVC from `ReadWriteMany` to `ReadWriteOnce`. This works **only** on single-node clusters, because every pod lands on the same node and a hostPath-backed RWO PVC is effectively visible to all of them.
 
 `hack/acceptance-setup.sh` uses exactly this trick: it creates an alias StorageClass named `nfs` over `rancher.io/local-path` so the operator's PVC specs still validate, then sets `--pvc-access-mode=ReadWriteOnce` on the controller deployment.
 
-The architectural claim — that a shared mount is sufficient to ferry mailbox JSON between pods — can be verified on any single-node cluster with:
+The architectural claim. That a shared mount is sufficient to ferry mailbox JSON between pods. Can be verified on any single-node cluster with:
 
 ```bash
 make acceptance-up
@@ -133,10 +133,10 @@ The smoke test reports the effective StorageClass and AccessMode on its PASS lin
 
 The native Agent Teams protocol is file-based:
 
-- **Mailboxes** — each agent has a JSON inbox at `~/.claude/teams/{team}/inboxes/{agent}.json`. Agents read their own inbox for messages from teammates.
-- **Task list** — a shared JSON file at `~/.claude/tasks/{team}/tasks.json`. The lead writes tasks; teammates claim and update them.
+- **Mailboxes**. Each agent has a JSON inbox at `~/.claude/teams/{team}/inboxes/{agent}.json`. Agents read their own inbox for messages from teammates.
+- **Task list**. A shared JSON file at `~/.claude/tasks/{team}/tasks.json`. The lead writes tasks; teammates claim and update them.
 
-The operator does not implement or speak this protocol — it only creates the shared PVC that makes the filesystem visible to all pods. Claude Code manages the protocol itself.
+The operator does not implement or speak this protocol. It only creates the shared PVC that makes the filesystem visible to all pods. Claude Code manages the protocol itself.
 
 ## Coding Mode
 
@@ -148,7 +148,7 @@ When `spec.repository` is set, the operator runs an init Job before deploying po
 
 Each teammate pod receives `WORKTREE_PATH=worktrees/{name}`, and the entrypoint `cd`s to that path before launching Claude Code. The lead has no worktree path and works directly from `/workspace/repo`.
 
-Per-worktree isolation prevents git conflicts between concurrent agents — each agent commits to its own branch, and the lead (or an `onComplete` action) handles merging.
+Per-worktree isolation prevents git conflicts between concurrent agents. Each agent commits to its own branch, and the lead (or an `onComplete` action) handles merging.
 
 ## Cowork Mode
 
@@ -156,7 +156,7 @@ When `spec.workspace` is set (and `spec.repository` is absent or minimal), the o
 
 - Creates an output PVC for writable agent output
 - Mounts workspace inputs (ConfigMaps or existing PVCs) read-only into each pod
-- Does not set `WORKTREE_PATH` — agents work in `/workspace/output` or `/workspace/data`
+- Does not set `WORKTREE_PATH`. Agents work in `/workspace/output` or `/workspace/data`
 
 The entrypoint detects the absence of a git repo gracefully and skips the `git log` startup output.
 
@@ -164,7 +164,7 @@ The entrypoint detects the absence of a git repo gracefully and skips the `git l
 
 Claude Code skills live under `~/.claude/skills/{name}/`. The operator mounts ConfigMap-backed skills at `/var/claude-skills/{name}/` and the entrypoint copies them to `~/.claude/skills/{name}/` before launching Claude Code.
 
-Skills are per-agent — the same skill ConfigMap can be mounted into multiple pods independently, so different teammates can have different skill sets.
+Skills are per-agent. The same skill ConfigMap can be mounted into multiple pods independently, so different teammates can have different skill sets.
 
 ## MCP Servers
 
@@ -193,7 +193,7 @@ The next reconcile loop (within 30 seconds) sees the annotation and spawns the t
 
 ## DependsOn Ordering
 
-Teammates can declare `dependsOn` — a list of other teammate names that must reach `Succeeded` phase before this teammate is spawned. The check runs every reconcile loop:
+Teammates can declare `dependsOn`. A list of other teammate names that must reach `Succeeded` phase before this teammate is spawned. The check runs every reconcile loop:
 
 - In `reconcileInitializing`: initial pod deployment respects dependency order
 - In `reconcileRunning`: newly unblocked teammates are spawned automatically as their dependencies complete
@@ -217,7 +217,7 @@ When the estimate exceeds `budgetLimit`, the operator terminates all pods and se
 
 ### Why shared PVC over a message bus?
 
-Agent Teams uses a file-based protocol. Rather than translating it to Redis or NATS, we preserve it exactly by mounting a shared filesystem. This means no changes to Claude Code itself, no protocol versioning concerns, and no additional infrastructure dependencies for simple deployments. The tradeoff is the requirement for ReadWriteMany PVC support — NFS or a cloud-native equivalent like EFS or GCP Filestore.
+Agent Teams uses a file-based protocol. Rather than translating it to Redis or NATS, we preserve it exactly by mounting a shared filesystem. This means no changes to Claude Code itself, no protocol versioning concerns, and no additional infrastructure dependencies for simple deployments. The tradeoff is the requirement for ReadWriteMany PVC support. NFS or a cloud-native equivalent like EFS or GCP Filestore.
 
 ### Why RestartPolicy: Never?
 
@@ -266,9 +266,9 @@ hack/
 
 ## Roadmap
 
-- **OCI skill artifacts** — pull skills from OCI registries instead of ConfigMaps
-- **Real token tracking** — instrument or sidecar Claude Code to capture actual usage
-- **envtest integration tests** — full reconcile loop tests against a real API server
-- **Horizontal scaling** — multiple operator replicas with leader election
-- **Beads/Dolt integration** — persistent task tracking across team runs
-- **`AgentTeamRun` controller** — reconciler for the template-instantiation CRD
+- **OCI skill artifacts**. Pull skills from OCI registries instead of ConfigMaps
+- **Real token tracking**. Instrument or sidecar Claude Code to capture actual usage
+- **envtest integration tests**. Full reconcile loop tests against a real API server
+- **Horizontal scaling**. Multiple operator replicas with leader election
+- **Beads/Dolt integration**. Persistent task tracking across team runs
+- **`AgentTeamRun` controller**. Reconciler for the template-instantiation CRD

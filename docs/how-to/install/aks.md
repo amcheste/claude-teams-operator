@@ -8,7 +8,7 @@ This guide walks you from a working AKS cluster to a running kagents operator ba
 - `kubectl` configured against the cluster
 - `helm` 3.14+
 - `az` CLI authenticated with the subscription that owns the cluster
-- The cluster's resource group and node resource group — `az aks show -g <rg> -n <cluster>` shows them
+- The cluster's resource group and node resource group. `az aks show -g <rg> -n <cluster>` shows them
 
 ## 1. Verify the Azure Files CSI driver is enabled
 
@@ -105,7 +105,7 @@ Azure Files Premium (FileStorage SKU) is billed by **provisioned capacity** per 
 - **Price**: ~$0.16/GiB-month for Premium NFS in most regions, plus tiny per-operation fees.
 - **Network**: free within the same Azure region.
 
-A 100 GiB Premium share is **~$16/month**. That's enough for tens of concurrent teams' worth of mailbox state. For larger teams or longer retention, scale capacity up — Azure Files Premium auto-scales IOPS proportional to provisioned size.
+A 100 GiB Premium share is **~$16/month**. That's enough for tens of concurrent teams' worth of mailbox state. For larger teams or longer retention, scale capacity up. Azure Files Premium auto-scales IOPS proportional to provisioned size.
 
 The honest range for a small production install is **$15–$50/month** depending on how aggressively you scale capacity for performance.
 
@@ -127,10 +127,10 @@ The honest range for a small production install is **$15–$50/month** depending
     Azure Files NFS without `nconnect=4` can be 2-3x slower than expected. Add the mount option in the StorageClass and recreate any pods using existing PVCs to pick it up.
 
 ??? warning "Cannot use Standard or Premium_ZRS SKU"
-    Only `Premium_LRS` supports NFS. Standard SMB shares technically support RWX but the file-locking semantics don't work for the mailbox protocol — use Premium NFS.
+    Only `Premium_LRS` supports NFS. Standard SMB shares technically support RWX but the file-locking semantics don't work for the mailbox protocol. Use Premium NFS.
 
 ## Where to look next
 
-- [Resource model](../../explanation/resources.md) — the CRDs you'll be writing
-- [Coordination protocol](../../explanation/coordination.md) — why RWX matters in detail
-- [Operations](../../explanation/operations.md) — budget, RBAC, observability for the running operator
+- [Resource model](../../explanation/resources.md). The CRDs you'll be writing
+- [Coordination protocol](../../explanation/coordination.md). Why RWX matters in detail
+- [Operations](../../explanation/operations.md). Budget, RBAC, observability for the running operator

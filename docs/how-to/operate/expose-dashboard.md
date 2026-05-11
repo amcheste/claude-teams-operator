@@ -1,6 +1,6 @@
 # Expose the dashboard
 
-The dashboard ships with kagents but is **off by default** — installing the chart alone gives you the controller and CRDs only. This guide walks through enabling it and exposing it for the three most common scenarios.
+The dashboard ships with kagents but is **off by default**. Installing the chart alone gives you the controller and CRDs only. This guide walks through enabling it and exposing it for the three most common scenarios.
 
 For why the dashboard is off by default and what it can show, see the [Operations explanation](../../explanation/operations.md).
 
@@ -39,7 +39,7 @@ kubectl port-forward -n claude-teams-system svc/kagents-dashboard 8080:8080
 
 Open http://localhost:8080. You'll see the team list view; click any team for the detail page with live SSE updates.
 
-`port-forward` is fine for dev but is a single-user tunnel through your local kubeconfig — don't rely on it for shared access.
+`port-forward` is fine for dev but is a single-user tunnel through your local kubeconfig. Don't rely on it for shared access.
 
 ## Scenario 2: production (Ingress with basic auth)
 
@@ -100,11 +100,11 @@ The pattern:
 2. Point your Ingress at oauth2-proxy instead of the dashboard
 3. Configure oauth2-proxy's `--upstream` flag to forward authenticated requests to `http://kagents-dashboard:8080`
 
-This is a standard pattern with extensive documentation in the oauth2-proxy project. The dashboard itself doesn't need to change — it stays on the internal Service, and oauth2-proxy handles all authentication and group/role checks before requests reach it.
+This is a standard pattern with extensive documentation in the oauth2-proxy project. The dashboard itself doesn't need to change. It stays on the internal Service, and oauth2-proxy handles all authentication and group/role checks before requests reach it.
 
 ## Scoping the dashboard to one namespace
 
-By default the dashboard sees AgentTeams in **every** namespace (a `ClusterRoleBinding` grants read across the cluster). To restrict it to a single namespace — e.g. when teams in different namespaces belong to different tenants:
+By default the dashboard sees AgentTeams in **every** namespace (a `ClusterRoleBinding` grants read across the cluster). To restrict it to a single namespace, e.g. when teams in different namespaces belong to different tenants:
 
 ```bash
 helm upgrade kagents \
@@ -127,10 +127,10 @@ Once the dashboard is reachable, deploy a quick test team and open the detail vi
 kubectl apply -n dev-agents -f config/samples/auth-refactor-team.yaml
 ```
 
-The list view should show the team. Click in — the detail page streams live status updates via SSE; killing a teammate pod with `kubectl delete pod ...` should cause the page to redraw within a second or two.
+The list view should show the team. Click in. The detail page streams live status updates via SSE; killing a teammate pod with `kubectl delete pod ...` should cause the page to redraw within a second or two.
 
 ## Where to look next
 
-- [Operations explanation](../../explanation/operations.md) — what the dashboard's metrics and alerts look like
-- [Configure shared storage](shared-storage.md) — sizing and tuning the PVC backends
-- [Set budget alerts](budget-alerts.md) — wiring webhook alerts on cost overruns
+- [Operations explanation](../../explanation/operations.md). What the dashboard's metrics and alerts look like
+- [Configure shared storage](shared-storage.md). Sizing and tuning the PVC backends
+- [Set budget alerts](budget-alerts.md). Wiring webhook alerts on cost overruns

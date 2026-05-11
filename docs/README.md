@@ -17,4 +17,4 @@ A push to `main` that touches `docs/`, `mkdocs.yml`, or `.github/workflows/docs.
 
 ## Structure
 
-The site uses the [Diátaxis framework](https://diataxis.fr) — four sections: Tutorials, How-to guides, Reference, Explanation. Section pages will be filled in by the v0.7.0 content issues. For now only the homepage exists.
+The site uses the [Diátaxis framework](https://diataxis.fr). Four sections: Tutorials, How-to guides, Reference, Explanation. Section pages will be filled in by the v0.7.0 content issues. For now only the homepage exists.
