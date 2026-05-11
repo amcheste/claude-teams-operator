@@ -118,7 +118,7 @@ This project is being developed with the goal of presenting at KubeCon NA 2026 (
 
 ### Release Timeline
 
-All milestones and issues are tracked on GitHub. The CFP is **OPEN** with submissions due **May 31 2026 at 11:59pm MT** — see KUBECON.md.
+All milestones and issues are tracked on GitHub. The KubeCon CFP has been **submitted** (May 2026) — see KUBECON.md.
 
 | Version | GitHub Milestone | Due | What it unlocks |
 |---------|-----------------|-----|-----------------|
@@ -128,9 +128,9 @@ All milestones and issues are tracked on GitHub. The CFP is **OPEN** with submis
 | **v0.4.0** | Resilience & RBAC | Aug 31 2026 | Crash re-spawn ✅, per-agent ServiceAccounts ✅, `onComplete: create-pr` ✅, `onComplete: push-branch` |
 | **v0.5.0** | Template Engine & Helm | Sep 30 2026 | `AgentTeamTemplate`/`AgentTeamRun` controllers, production Helm chart, CONTRIBUTING.md |
 | **v0.6.0** | Operator Dashboard | Oct 5 2026 | Web UI for running AgentTeams: backend API, list + detail views (HTMX + Go templates), live SSE updates, Helm packaging |
-| **v1.0.0** | KubeCon Demo Polish | Oct 26 2026 | Demo script, CFP submitted, OCI skill distribution, dashboard presentation mode for stage |
+| **v1.0.0** | KubeCon Demo Polish | Oct 26 2026 | Demo script, OCI skill distribution, dashboard presentation mode for stage |
 
-**KubeCon talk:** November 9–12 2026, Salt Lake City. CFP deadline: May 31 2026.
+**KubeCon talk:** November 9–12 2026, Salt Lake City. CFP submitted May 2026.
 
 ### Current Priority (post-v0.3.0)
 
@@ -138,7 +138,6 @@ The next highest-value issues:
 1. **#16** — `onComplete: push-branch` — closes out v0.4.0 alongside the already-merged #13/#14/#15
 2. **#17 / #18** — AgentTeamTemplate + AgentTeamRun controllers (v0.5.0)
 3. **#137–#140** — the operator dashboard (v0.6.0)
-4. **#23** — draft and submit the KubeCon CFP by May 31 — this is the hard deadline
 
 ### Ask of Claude Code
 

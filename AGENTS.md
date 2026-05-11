@@ -1,24 +1,24 @@
-# AGENTS.md — Agent Team Guidelines for claude-teams-operator
+# AGENTS.md. Agent Team Guidelines for claude-teams-operator
 
 ## When working as a teammate on this project
 
-1. **Check the task list first** — before starting work, check what's assigned to you
-2. **Respect module boundaries** — each internal package has a clear scope:
-   - `internal/controller/` — only reconciliation logic
-   - `internal/claude/` — only Claude Code file I/O and session management
-   - `internal/budget/` — only cost estimation
-   - `internal/webhook/` — only external notifications
-   - `internal/metrics/` — only Prometheus metrics
-3. **Use kubebuilder markers** — all CRD types in `api/v1alpha1/` must have proper `+kubebuilder:` annotations
-4. **Test with envtest** — controller tests should use controller-runtime's envtest framework
-5. **Follow Kubernetes conventions** — conditions use `metav1.Condition`, status updates are separate from spec changes
+1. **Check the task list first**. Before starting work, check what's assigned to you
+2. **Respect module boundaries**. Each internal package has a clear scope:
+   - `internal/controller/`. Only reconciliation logic
+   - `internal/claude/`. Only Claude Code file I/O and session management
+   - `internal/budget/`. Only cost estimation
+   - `internal/webhook/`. Only external notifications
+   - `internal/metrics/`. Only Prometheus metrics
+3. **Use kubebuilder markers**. All CRD types in `api/v1alpha1/` must have proper `+kubebuilder:` annotations
+4. **Test with envtest**. Controller tests should use controller-runtime's envtest framework
+5. **Follow Kubernetes conventions**. Conditions use `metav1.Condition`, status updates are separate from spec changes
 
 ## Architecture rules
 
-- The operator NEVER makes Anthropic API calls directly — it only manages pods that run Claude Code
-- All inter-agent communication goes through the shared PVC filesystem — the operator just creates and monitors the volumes
-- Budget tracking is estimation-based — we can't read real-time token counts from Claude Code
-- Pods use `RestartPolicy: Never` — crashed agents get re-spawned fresh, not restarted
+- The operator NEVER makes Anthropic API calls directly. It only manages pods that run Claude Code
+- All inter-agent communication goes through the shared PVC filesystem. The operator just creates and monitors the volumes
+- Budget tracking is estimation-based. We can't read real-time token counts from Claude Code
+- Pods use `RestartPolicy: Never`. Crashed agents get re-spawned fresh, not restarted
 
 ## Build verification
 
