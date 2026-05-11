@@ -30,8 +30,8 @@ Azure Files supports two protocols, and only one is suitable for kagents:
 
 | Protocol | RWX? | Use? |
 |----------|------|------|
-| **NFS v4.1** | ✅ Yes | **Yes — use this.** |
-| **SMB** | ⚠️ Partial | No — POSIX semantics on the agent's mailbox writes don't work reliably. |
+| **NFS v4.1** | ✅ Yes | **Yes, use this.** |
+| **SMB** | ⚠️ Partial | No. POSIX semantics on the agent's mailbox writes don't work reliably. |
 
 NFS shares require a Premium storage account (FileStorage SKU). The good news is Premium pricing is reasonable for the small share sizes kagents needs.
 

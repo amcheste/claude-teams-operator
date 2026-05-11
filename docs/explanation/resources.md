@@ -4,7 +4,7 @@ kagents manages three custom resources. Most users only ever touch the first one
 
 | CRD | What it represents | When to use |
 |-----|-------------------|-------------|
-| `AgentTeam` | A specific team running a specific job | One-off work — refactor, code review, report draft |
+| `AgentTeam` | A specific team running a specific job | One-off work, e.g. refactor, code review, report draft |
 | `AgentTeamTemplate` | A reusable team blueprint | You'll instantiate the same team shape against many inputs |
 | `AgentTeamRun` | One instantiation of a template | Used together with `AgentTeamTemplate` |
 
