@@ -15,9 +15,9 @@
 
 ---
 
-> **kagents** is the project brand. The implementation lives in the [`claude-teams-operator`](https://github.com/amcheste/claude-teams-operator) repository and ships under the `claude.amcheste.io/v1alpha1` API group. Documentation site: [kagents.dev](https://kagents.dev) (under construction — see [v0.7.0 milestone](https://github.com/amcheste/claude-teams-operator/milestone/8)).
+> **kagents** is the project brand. The implementation lives in the [`claude-teams-operator`](https://github.com/amcheste/claude-teams-operator) repository and ships under the `claude.amcheste.io/v1alpha1` API group. Documentation site: [kagents.dev](https://kagents.dev) (under construction. See [v0.7.0 milestone](https://github.com/amcheste/claude-teams-operator/milestone/8)).
 
-Claude Code [Agent Teams](https://docs.anthropic.com/en/docs/claude-code/agent-teams) let multiple Claude Code instances collaborate — a lead coordinates work via a shared task list while teammates communicate through peer-to-peer mailboxes. Natively this runs on a single machine using tmux. This operator lifts that pattern into Kubernetes so you can run large-scale agent teams on your cluster.
+Claude Code [Agent Teams](https://docs.anthropic.com/en/docs/claude-code/agent-teams) let multiple Claude Code instances collaborate. A lead coordinates work via a shared task list while teammates communicate through peer-to-peer mailboxes. Natively this runs on a single machine using tmux. This operator lifts that pattern into Kubernetes so you can run large-scale agent teams on your cluster.
 
 ## Modes
 
@@ -32,23 +32,23 @@ Both modes share the same coordination protocol (shared PVCs, mailboxes, task li
 
 ## Features
 
-- **Native Agent Teams protocol** — preserves Anthropic's file-based mailbox and task list format over ReadWriteMany PVCs; no protocol translation
-- **Per-teammate git worktrees** — each coding agent works on an isolated branch to prevent merge conflicts
-- **Cowork mode** — mount ConfigMap/PVC inputs and collect outputs without requiring a git repo
-- **Skills as CRD fields** — mount Claude Code skills from ConfigMaps into each agent's `.claude/skills/`
-- **MCP servers per agent** — configure Model Context Protocol connections per teammate
-- **Approval gates** — pause spawning specific teammates until a human applies an annotation
-- **Budget enforcement** — terminate the team if estimated API cost exceeds a configured limit
-- **Timeout enforcement** — terminate the team after a configurable wall-clock duration
-- **`dependsOn` ordering** — spawn teammates only after their declared dependencies complete
-- **Reusable templates** — define team patterns with `AgentTeamTemplate`, instantiate with `AgentTeamRun`
+- **Native Agent Teams protocol**. Preserves Anthropic's file-based mailbox and task list format over ReadWriteMany PVCs; no protocol translation
+- **Per-teammate git worktrees**. Each coding agent works on an isolated branch to prevent merge conflicts
+- **Cowork mode**. Mount ConfigMap/PVC inputs and collect outputs without requiring a git repo
+- **Skills as CRD fields**. Mount Claude Code skills from ConfigMaps into each agent's `.claude/skills/`
+- **MCP servers per agent**. Configure Model Context Protocol connections per teammate
+- **Approval gates**. Pause spawning specific teammates until a human applies an annotation
+- **Budget enforcement**. Terminate the team if estimated API cost exceeds a configured limit
+- **Timeout enforcement**. Terminate the team after a configurable wall-clock duration
+- **`dependsOn` ordering**. Spawn teammates only after their declared dependencies complete
+- **Reusable templates**. Define team patterns with `AgentTeamTemplate`, instantiate with `AgentTeamRun`
 
 ## Quick Start
 
 ### Prerequisites
 
 - Kubernetes 1.28+
-- ReadWriteMany PVC support (NFS, EFS, or a compatible CSI driver — see [ARCHITECTURE.md § Storage Requirements](ARCHITECTURE.md#storage-requirements) for options)
+- ReadWriteMany PVC support (NFS, EFS, or a compatible CSI driver. See [ARCHITECTURE.md § Storage Requirements](ARCHITECTURE.md#storage-requirements) for options)
 - Claude Code CLI access (Max subscription or API key)
 - Opus 4.6 model access (required for Agent Teams)
 
@@ -222,7 +222,7 @@ The primary resource. Defines the full team, its workspace, lifecycle, and obser
 
 ### AgentTeamTemplate
 
-A reusable team pattern. Does not run on its own — instantiate with `AgentTeamRun`.
+A reusable team pattern. Does not run on its own. Instantiate with `AgentTeamRun`.
 
 ### AgentTeamRun
 

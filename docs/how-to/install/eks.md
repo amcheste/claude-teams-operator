@@ -8,7 +8,7 @@ This guide walks you from a working EKS cluster to a running kagents operator ba
 - `kubectl` configured against the cluster
 - `helm` 3.14+
 - `aws` CLI authenticated with permissions to create EFS file systems and IAM policies
-- The cluster's VPC ID and the security group used by your worker nodes — `aws eks describe-cluster --name <cluster-name>` shows them
+- The cluster's VPC ID and the security group used by your worker nodes. `aws eks describe-cluster --name <cluster-name>` shows them
 
 ## 1. Install the EFS CSI driver
 
@@ -119,7 +119,7 @@ A passing run looks like:
 PASS  StorageClass=nfs  AccessMode=ReadWriteMany  RoundTripMs=842
 ```
 
-If `AccessMode` reports `ReadWriteOnce` or the test fails to schedule the second pod, your StorageClass isn't actually advertising RWX — re-check step 3.
+If `AccessMode` reports `ReadWriteOnce` or the test fails to schedule the second pod, your StorageClass isn't actually advertising RWX. Re-check step 3.
 
 ## Cost notes
 
@@ -127,7 +127,7 @@ EFS is billed by storage GB-month + provisioned throughput. For a typical kagent
 
 - **Storage**: 1-5 GiB per team. At ~$0.30/GiB-month (Standard storage class), expect $0.50–$2/month for storage.
 - **Throughput**: in `elastic` mode you pay per byte read/written (~$0.01/GiB). Idle teams cost nothing; active teams during a busy period might generate a few GiB of traffic per day.
-- **Per-mount cost**: nothing — EFS mount targets are free.
+- **Per-mount cost**: nothing. EFS mount targets are free.
 
 The honest range for a small production install is **$5–$30/month**. For larger scale see the [EFS pricing page](https://aws.amazon.com/efs/pricing/).
 
@@ -147,6 +147,6 @@ The honest range for a small production install is **$5–$30/month**. For large
 
 ## Where to look next
 
-- [Resource model](../../explanation/resources.md) — the CRDs you'll be writing
-- [Coordination protocol](../../explanation/coordination.md) — why RWX matters in detail
-- [Operations](../../explanation/operations.md) — budget, RBAC, observability for the running operator
+- [Resource model](../../explanation/resources.md). The CRDs you'll be writing
+- [Coordination protocol](../../explanation/coordination.md). Why RWX matters in detail
+- [Operations](../../explanation/operations.md). Budget, RBAC, observability for the running operator

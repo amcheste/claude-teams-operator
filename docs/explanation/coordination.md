@@ -4,15 +4,15 @@ This is the load-bearing design choice in kagents: agent-to-agent communication 
 
 ## Why a shared filesystem instead of a message bus?
 
-Anthropic's Claude Code Agent Teams runs natively on a single machine using tmux. Multiple Claude Code instances coordinate via files in `~/.claude/teams/` — JSON inboxes for peer-to-peer messages, a JSON task list for shared work tracking. The protocol is unspecified beyond "look at the files."
+Anthropic's Claude Code Agent Teams runs natively on a single machine using tmux. Multiple Claude Code instances coordinate via files in `~/.claude/teams/`. JSON inboxes for peer-to-peer messages, a JSON task list for shared work tracking. The protocol is unspecified beyond "look at the files."
 
 We could have translated this to Redis, NATS, or a custom gRPC service. We chose not to:
 
-- **No protocol versioning to track.** Claude Code owns the format. When it ships a v2 mailbox schema, kagents inherits it for free — we never read or write the contents.
+- **No protocol versioning to track.** Claude Code owns the format. When it ships a v2 mailbox schema, kagents inherits it for free. We never read or write the contents.
 - **No translation layer to debug.** When something goes wrong, you can `kubectl exec` into a pod and inspect the actual files Claude Code is reading and writing. There's no opaque protocol bridge in the middle.
 - **No additional infrastructure.** A bare RWX PVC is enough. No Redis to operate, no message-bus HA story.
 
-The cost is real — ReadWriteMany storage isn't free on every cluster, and we have to be honest about that.
+The cost is real. ReadWriteMany storage isn't free on every cluster, and we have to be honest about that.
 
 ## Mailbox layout
 
@@ -70,7 +70,7 @@ graph TB
     style O fill:#f3e5f5,stroke:#7b1fa2
 ```
 
-The `team-state` PVC is the coordination fabric — it carries the mailboxes and the task list. The `repo` PVC (coding mode) carries the git clone and per-teammate worktrees. The `output` PVC (Cowork mode) is where agents write artifacts.
+The `team-state` PVC is the coordination fabric. It carries the mailboxes and the task list. The `repo` PVC (coding mode) carries the git clone and per-teammate worktrees. The `output` PVC (Cowork mode) is where agents write artifacts.
 
 In practice the operator mounts the team-state PVC into each pod, and the entrypoint symlinks the `teams/` and `tasks/` subdirectories into `~/.claude/`:
 
@@ -92,7 +92,7 @@ If the backing PVC supports only `ReadWriteOnce`, the second pod fails to mount 
 
 ### Supported backends
 
-The operator has no opinion about the CSI driver — it asks for an RWX PVC and a `storageClassName` you supply. Backends that satisfy the contract:
+The operator has no opinion about the CSI driver. It asks for an RWX PVC and a `storageClassName` you supply. Backends that satisfy the contract:
 
 | Platform | Driver | Notes |
 |----------|--------|-------|
@@ -104,7 +104,7 @@ The operator has no opinion about the CSI driver — it asks for an RWX PVC and 
 
 ### Single-node fallback
 
-For laptops, Kind, k3d, minikube — a real RWX provisioner is overkill. The operator accepts a `--pvc-access-mode=ReadWriteOnce` flag. This works **only** because every pod lands on the same node, and a hostPath-backed RWO PVC is then visible to all of them.
+For laptops, Kind, k3d, minikube. A real RWX provisioner is overkill. The operator accepts a `--pvc-access-mode=ReadWriteOnce` flag. This works **only** because every pod lands on the same node, and a hostPath-backed RWO PVC is then visible to all of them.
 
 !!! danger "Don't use RWO on a multi-node cluster"
     A second pod scheduled on a different node will fail to mount the PVC and the team will deadlock. The single-node fallback is a development convenience, not a production option.
@@ -154,7 +154,7 @@ When `spec.workspace` is set instead of `spec.repository`, the operator skips th
 - Mounts `workspace.inputs` (ConfigMaps or existing PVCs) read-only into each pod
 - Doesn't set `WORKTREE_PATH`; agents work in `/workspace/output` or `/workspace/data`
 
-The mailbox protocol is identical — Cowork agents still coordinate via `~/.claude/teams/.../inboxes/`. The only difference is what filesystem they're writing artifacts into.
+The mailbox protocol is identical. Cowork agents still coordinate via `~/.claude/teams/.../inboxes/`. The only difference is what filesystem they're writing artifacts into.
 
 ## What this means for debugging
 
@@ -168,5 +168,5 @@ There's no opaque coordinator process to dump. Everything Claude Code knows abou
 
 ## Where to look next
 
-- [Resource model](resources.md) — the CRDs that compose into a running team
-- [Operations](operations.md) — budget, RBAC, and observability for the running team
+- [Resource model](resources.md). The CRDs that compose into a running team
+- [Operations](operations.md). Budget, RBAC, and observability for the running team

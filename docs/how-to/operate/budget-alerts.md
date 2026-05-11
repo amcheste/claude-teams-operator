@@ -20,7 +20,7 @@ spec:
     budgetLimit: "10.00"   # USD
 ```
 
-There's no grace period — the team stops the moment the estimate crosses. The estimate is conservative-to-the-low-side (~50K input + 5K output tokens per agent per minute is a rough ballpark), so set the limit with **2x headroom** over what you actually want to spend.
+There's no grace period. The team stops the moment the estimate crosses. The estimate is conservative-to-the-low-side (~50K input + 5K output tokens per agent per minute is a rough ballpark), so set the limit with **2x headroom** over what you actually want to spend.
 
 ## Chart-wide default
 
@@ -33,11 +33,11 @@ helm upgrade kagents \
   --set defaultBudgetLimit=15.00
 ```
 
-This is a safety net, not a recommendation — every team should set its own `budgetLimit` based on the work it's doing. The default exists to prevent a misconfigured team from running unbounded.
+This is a safety net, not a recommendation. Every team should set its own `budgetLimit` based on the work it's doing. The default exists to prevent a misconfigured team from running unbounded.
 
 ## Webhook events on threshold crossings
 
-The operator fires a `budget.warning` webhook event when a team's estimated cost crosses **80% of its `budgetLimit`** — useful as an early warning before the hard stop fires.
+The operator fires a `budget.warning` webhook event when a team's estimated cost crosses **80% of its `budgetLimit`**. Useful as an early warning before the hard stop fires.
 
 ### Configure the webhook URL
 
@@ -109,8 +109,8 @@ PagerDuty's [Events API v2](https://developer.pagerduty.com/docs/events-api-v2/o
 
 For teams that already have a Prometheus + Alertmanager stack, alert directly on the metrics the chart exposes. The relevant series:
 
-- `claude_team_cost_usd{team_name=...}` — current estimated cost
-- `claude_team_budget_remaining_usd{team_name=...}` — `limit - cost`
+- `claude_team_cost_usd{team_name=...}`. Current estimated cost
+- `claude_team_budget_remaining_usd{team_name=...}`. `limit - cost`
 
 ### Alert: budget about to be exceeded
 
@@ -186,6 +186,6 @@ If the estimate is consistently 50% low, double your `budgetLimit` headroom. If 
 
 ## Where to look next
 
-- [Operations explanation](../../explanation/operations.md) — how the budget is computed in detail
-- [Expose the dashboard](expose-dashboard.md) — visual cost view per team
-- [Configure shared storage](shared-storage.md) — the other recurring cost on a kagents install
+- [Operations explanation](../../explanation/operations.md). How the budget is computed in detail
+- [Expose the dashboard](expose-dashboard.md). Visual cost view per team
+- [Configure shared storage](shared-storage.md). The other recurring cost on a kagents install
