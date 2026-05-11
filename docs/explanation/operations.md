@@ -26,7 +26,7 @@ The reconciler compares `status.estimatedCostUsd` against `spec.lifecycle.budget
 3. `status.completedAt` is stamped
 4. A `webhook.budgetExceeded` event fires (if configured)
 
-There's no grace period — the team stops the moment the estimate crosses. Set the limit with headroom.
+There's no grace period. The team stops the moment the estimate crosses. Set the limit with headroom.
 
 ### Honest tradeoffs
 
@@ -34,7 +34,7 @@ This is the lightest-touch approach available without instrumenting Claude Code.
 
 - **Estimate, not measurement.** Real token usage depends on prompt length, context window growth, and how often the agent reaches for tools. The estimate can be off by 2-3x in either direction.
 - **Heuristic is per-active-minute.** An agent waiting on `dependsOn` doesn't accrue cost; one running flat out at the same rate as one mostly idle does. The heuristic averages the difference away.
-- **Rate table is hardcoded.** The token-per-minute heuristic and the per-million prices live in `internal/budget/tracker.go`. Adjusting them requires a code change and rebuild — config-via-Helm-values is on the roadmap.
+- **Rate table is hardcoded.** The token-per-minute heuristic and the per-million prices live in `internal/budget/tracker.go`. Adjusting them requires a code change and rebuild. Config-via-Helm-values is on the roadmap.
 
 For production, set `budgetLimit` ~2x what you actually want to spend, and treat the budget as a circuit breaker rather than a precise meter. Real cost tracking via instrumented Claude Code or sidecar log parsing is on the roadmap; until then, the [Anthropic console](https://console.anthropic.com/) is the source of truth for accounting.
 
@@ -77,10 +77,10 @@ The threat model is "a teammate's prompt is malicious or compromised." The blast
 - ✅ Cannot read another teammate's secrets (different SA)
 - ✅ Cannot exec into the lead pod (no `pods/exec`)
 - ✅ Cannot enumerate cluster state (no list verbs on namespace-wide resources)
-- ⚠️ Can write to the shared `team-state` PVC — a malicious teammate could poison the task list or write to a peer's inbox. This is inherent to the file-based protocol; mitigations would require Claude Code to authenticate writes.
+- ⚠️ Can write to the shared `team-state` PVC. A malicious teammate could poison the task list or write to a peer's inbox. This is inherent to the file-based protocol; mitigations would require Claude Code to authenticate writes.
 - ⚠️ Can write to the shared `repo` PVC. Worktrees are isolated by branch, but the agent could `cd` to a peer's worktree.
 
-The RBAC model handles the K8s side cleanly; the filesystem-level threats need protocol-level signing to fully address. For most use cases — internal CI, trusted prompts — the filesystem trust model is acceptable.
+The RBAC model handles the K8s side cleanly; the filesystem-level threats need protocol-level signing to fully address. For most use cases. Internal CI, trusted prompts. The filesystem trust model is acceptable.
 
 ## Observability
 
@@ -163,6 +163,6 @@ Within 30 seconds (the default reconcile interval), the gated teammate spawns an
 
 ## Where to look next
 
-- [Resource model](resources.md) — what an `AgentTeam` looks like under the hood
-- [Coordination protocol](coordination.md) — how the agents actually talk to each other
-- [How-to guides](../how-to/index.md) — concrete operational recipes (coming in v0.7.0)
+- [Resource model](resources.md). What an `AgentTeam` looks like under the hood
+- [Coordination protocol](coordination.md). How the agents actually talk to each other
+- [How-to guides](../how-to/index.md). Concrete operational recipes (coming in v0.7.0)

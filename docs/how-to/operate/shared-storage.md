@@ -36,7 +36,7 @@ spec:
 
 ## Backup
 
-For most use cases the team-state PVC can be discarded — the mailbox is intermediate state, and finished teams' artifacts live elsewhere (in the git remote or in the Cowork output PVC). For the cases where you do want backups:
+For most use cases the team-state PVC can be discarded. The mailbox is intermediate state, and finished teams' artifacts live elsewhere (in the git remote or in the Cowork output PVC). For the cases where you do want backups:
 
 ### EFS (EKS)
 
@@ -90,7 +90,7 @@ The dominant workload is small synchronous writes (mailbox JSON updates) and sma
 
 ### EFS
 
-- **Throughput mode**: `elastic` is the right default — pay per byte, scale automatically. Switch to `provisioned` only if you measure consistent saturation in CloudWatch's `BurstCreditBalance` metric.
+- **Throughput mode**: `elastic` is the right default. Pay per byte, scale automatically. Switch to `provisioned` only if you measure consistent saturation in CloudWatch's `BurstCreditBalance` metric.
 - **Performance mode**: `generalPurpose` for <7,000 file ops/sec total across all teams (the typical case). `maxIO` only if you exceed that; it adds 1-3ms latency per op which hurts mailbox round-trips.
 - **Mount options**: defaults are fine. The CSI driver applies `nfsvers=4.1, rsize=1048576, wsize=1048576` by default.
 
@@ -101,7 +101,7 @@ The dominant workload is small synchronous writes (mailbox JSON updates) and sma
 
 ### Azure Files (Premium NFS)
 
-- **Mount option `nconnect=4`** is the single biggest performance win. Without it, expect 2-3x slower mailbox round-trips. Set it in the StorageClass — see the [AKS install guide](../install/aks.md#3-create-the-storageclass).
+- **Mount option `nconnect=4`** is the single biggest performance win. Without it, expect 2-3x slower mailbox round-trips. Set it in the StorageClass. See the [AKS install guide](../install/aks.md#3-create-the-storageclass).
 - **Provisioned IOPS**: Azure Files Premium gives baseline IOPS proportional to provisioned size (1 IOPS per GiB). For a 100 GiB share, you get ~100 IOPS baseline + bursting. Raise capacity for more IOPS, not for more storage you don't need.
 
 ## Monitoring storage health
@@ -112,10 +112,10 @@ Use the Prometheus metrics the chart exposes (see the [Operations explanation](.
 - **Filestore**: `nfs/server/operation_count`, `nfs/server/free_bytes_percent` in Cloud Monitoring
 - **Azure Files**: `Transactions`, `SuccessE2ELatency` in Azure Monitor
 
-A sudden spike in operation count without a corresponding rise in active teams usually indicates a stuck-poll loop in one team — `kubectl describe agentteam <name>` to investigate.
+A sudden spike in operation count without a corresponding rise in active teams usually indicates a stuck-poll loop in one team. `kubectl describe agentteam <name>` to investigate.
 
 ## Where to look next
 
-- [Coordination protocol](../../explanation/coordination.md) — what the storage is actually carrying
-- [Set budget alerts](budget-alerts.md) — wiring cost overruns into your alert pipeline
-- [Expose the dashboard](expose-dashboard.md) — visual storage-load view
+- [Coordination protocol](../../explanation/coordination.md). What the storage is actually carrying
+- [Set budget alerts](budget-alerts.md). Wiring cost overruns into your alert pipeline
+- [Expose the dashboard](expose-dashboard.md). Visual storage-load view
