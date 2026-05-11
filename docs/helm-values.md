@@ -86,7 +86,7 @@ Defaults applied to PVCs the operator creates per AgentTeam. **Required:** the s
 | `metrics.serviceMonitor.enabled` | `false` | **Production:** set to `true` when running with kube-prometheus-stack. Requires the `monitoring.coreos.com` CRDs. |
 | `metrics.serviceMonitor.namespace` | `""` | Namespace for the ServiceMonitor. Defaults to the release namespace. Set this to the Prometheus namespace when using a namespace-scoped selector. |
 | `metrics.serviceMonitor.interval` | `30s` | Prometheus scrape interval. |
-| `metrics.serviceMonitor.additionalLabels` | `{}` | Extra labels on the ServiceMonitor. Match your Prometheus CR's selector — e.g. `{release: kube-prometheus-stack}`. |
+| `metrics.serviceMonitor.additionalLabels` | `{}` | Extra labels on the ServiceMonitor. Match your Prometheus CR's selector, e.g. `{release: kube-prometheus-stack}`. |
 
 ## Metrics. Grafana dashboard
 

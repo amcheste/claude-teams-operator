@@ -16,7 +16,7 @@ You don't need any cloud accounts or external services. Everything runs on your 
 | [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) | 0.25+ | Single-node Kubernetes for dev |
 | [kubectl](https://kubernetes.io/docs/tasks/tools/) | 1.28+ | Interact with the cluster |
 | [helm](https://helm.sh/docs/intro/install/) | 3.14+ | Install the operator chart |
-| [Anthropic API key](https://console.anthropic.com/) | — | Required for agents to actually call Claude |
+| [Anthropic API key](https://console.anthropic.com/) | (any) | Required for agents to actually call Claude |
 
 You'll also need the kagents repo cloned locally so you can use the included `make kind-create` setup script (which provisions a Kind cluster with the NFS-style RWX storage the operator needs):
 
