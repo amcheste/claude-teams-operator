@@ -7,7 +7,7 @@ Only the latest released version is actively maintained. Security fixes are issu
 | Version | Supported |
 |---------|:---------:|
 | Latest release | ✅ |
-| Older releases | ❌ — please upgrade |
+| Older releases | ❌ please upgrade |
 
 The latest release is the most recent `v*` tag on https://github.com/amcheste/claude-teams-operator/releases.
 

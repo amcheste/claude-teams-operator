@@ -306,7 +306,7 @@ type LifecycleSpec struct {
 
 	// MaxRestarts bounds how many times each teammate pod may be re-spawned
 	// after a Failed phase before the team itself is marked Failed. The lead
-	// pod is not subject to this limit — a lead crash always fails the team.
+	// pod is not subject to this limit; a lead crash always fails the team.
 	// +kubebuilder:default=3
 	// +kubebuilder:validation:Minimum=0
 	// +optional

@@ -104,7 +104,7 @@ The operator itself has no opinion about the CSI driver. It asks for a PVC with 
 | Platform | Driver | Notes |
 |----------|--------|-------|
 | Kind (multi-node dev) | `nfs-ganesha/nfs-server-provisioner` | Installed by `hack/kind-setup.sh` as StorageClass `nfs`. Real RWX over an in-cluster NFS server. |
-| Kind (single-node acceptance) | `rancher.io/local-path` under the `nfs` StorageClass alias | Installed by `hack/acceptance-setup.sh`. See "Single-node fallback" — not true RWX. |
+| Kind (single-node acceptance) | `rancher.io/local-path` under the `nfs` StorageClass alias | Installed by `hack/acceptance-setup.sh`. See "Single-node fallback"; not true RWX. |
 | Amazon EKS | [EFS CSI driver](https://github.com/kubernetes-sigs/aws-efs-csi-driver) | StorageClass pointing at an EFS file system. RWX natively. |
 | Google GKE | [Filestore CSI driver](https://cloud.google.com/filestore/docs/csi-driver) | Enable the Filestore CSI add-on; Filestore instances advertise RWX. |
 | Azure AKS | [Azure Files CSI driver](https://learn.microsoft.com/azure/aks/azure-files-csi) | SMB or NFS-protocol file shares; both support RWX. |

@@ -10,7 +10,7 @@ The chart's default sizes are conservative; raise them if your teams handle larg
 
 | Volume | Default Helm value | Default size | When to raise |
 |--------|-------------------:|-------------:|---------------|
-| Team state (mailboxes + tasks) | `storage.teamStateSize` | `5Gi` | Almost never — mailbox JSON is tiny. 5 GiB holds thousands of messages. |
+| Team state (mailboxes + tasks) | `storage.teamStateSize` | `5Gi` | Almost never. Mailbox JSON is tiny. 5 GiB holds thousands of messages. |
 | Repo (coding mode) | `storage.repoSize` | `20Gi` | If your monorepo + per-teammate worktrees together exceed 20 GiB. Each worktree is roughly the size of your `git checkout`. For a 5-teammate team on a 4 GiB repo, 20 GiB might tip over. |
 | Output (Cowork mode) | `spec.workspace.output.size` (per-team) | n/a | Set per AgentTeam based on expected artifact volume. 1 GiB is fine for documents; raise for image/video output. |
 
