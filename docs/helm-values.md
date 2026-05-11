@@ -69,7 +69,7 @@ The operator pod is single-replica and lightweight by default. Bump limits if yo
 
 ## Storage
 
-Defaults applied to PVCs the operator creates per AgentTeam. **Required:** the storage class must support `ReadWriteMany` for multi-pod teams (NFS, EFS, CephFS) — see [ARCHITECTURE.md § Storage Requirements](../ARCHITECTURE.md#storage-requirements).
+Defaults applied to PVCs the operator creates per AgentTeam. **Required:** the storage class must support `ReadWriteMany` for multi-pod teams (NFS, EFS, CephFS). See [ARCHITECTURE.md § Storage Requirements](../ARCHITECTURE.md#storage-requirements).
 
 | Key | Default | Description |
 |---|---|---|
@@ -77,7 +77,7 @@ Defaults applied to PVCs the operator creates per AgentTeam. **Required:** the s
 | `storage.teamStateSize` | `5Gi` | Size of the team-state PVC (mailboxes + task list). |
 | `storage.repoSize` | `20Gi` | Size of the per-team repo PVC (clones + worktrees). |
 
-## Metrics — Service + ServiceMonitor
+## Metrics. Service + ServiceMonitor
 
 | Key | Default | Description |
 |---|---|---|
@@ -88,7 +88,7 @@ Defaults applied to PVCs the operator creates per AgentTeam. **Required:** the s
 | `metrics.serviceMonitor.interval` | `30s` | Prometheus scrape interval. |
 | `metrics.serviceMonitor.additionalLabels` | `{}` | Extra labels on the ServiceMonitor. Match your Prometheus CR's selector — e.g. `{release: kube-prometheus-stack}`. |
 
-## Metrics — Grafana dashboard
+## Metrics. Grafana dashboard
 
 Renders a ConfigMap holding a 10-panel Grafana dashboard for Claude team observability. With kube-prometheus-stack, the Grafana sidecar auto-imports any ConfigMap carrying the configured label.
 

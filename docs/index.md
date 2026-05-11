@@ -35,13 +35,13 @@ helm install kagents \
 
     ---
 
-    One `AgentTeam` CRD declares roles, budget, quality gates, and coordination topology. `AgentTeamTemplate` lets you reuse common team patterns — "3-agent security review," "fullstack feature team" — with one-line instantiation.
+    One `AgentTeam` CRD declares roles, budget, quality gates, and coordination topology. `AgentTeamTemplate` lets you reuse common team patterns. "3-agent security review," "fullstack feature team". With one-line instantiation.
 
 -   :material-kubernetes:{ .lg .middle } **K8s as coordination fabric**
 
     ---
 
-    ServiceAccounts scope what each agent pod can touch. RWX PVCs hold the shared mailboxes. RBAC enforces per-agent capability boundaries. The cluster does the coordination work — kagents just wires it up.
+    ServiceAccounts scope what each agent pod can touch. RWX PVCs hold the shared mailboxes. RBAC enforces per-agent capability boundaries. The cluster does the coordination work. Kagents just wires it up.
 
 -   :material-recycle-variant:{ .lg .middle } **Dogfooded**
 
@@ -61,7 +61,7 @@ helm install kagents \
 
 -   :material-cog: **[How-to guides](how-to/index.md)**
 
-    Recipes for specific operational tasks — install on a cloud, expose the dashboard, tune budgets.
+    Recipes for specific operational tasks. Install on a cloud, expose the dashboard, tune budgets.
 
 -   :material-book-open-variant: **[Reference](reference/index.md)**
 
@@ -69,7 +69,7 @@ helm install kagents \
 
 -   :material-lightbulb: **[Explanation](explanation/index.md)**
 
-    How and why kagents works the way it does — the architecture, the design tradeoffs.
+    How and why kagents works the way it does. The architecture, the design tradeoffs.
 
 </div>
 
@@ -85,6 +85,6 @@ helm install kagents \
 
 -   :material-presentation:{ .lg .middle } **Talk**
 
-    *Reconciling Agent Teams: A Kubernetes Operator for Claude Code* — KubeCon NA 2026 (submitted).
+    *Reconciling Agent Teams: A Kubernetes Operator for Claude Code*. KubeCon NA 2026 (submitted).
 
 </div>
