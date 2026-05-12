@@ -125,19 +125,20 @@ All milestones and issues are tracked on GitHub. The KubeCon CFP has been **subm
 | **v0.1.0** ✅ | Initial Release | Apr 13 2026 | Core operator, 50+25+19 tests, CI |
 | **v0.2.0** ✅ | Foundation & Real Runner | Apr 19 2026 | Real `claude-code-runner` image, E2E test, mailbox PVC validation, talk-ready `describe` output |
 | **v0.3.0** ✅ | Observability & Budget | Apr 24 2026 | Prometheus metrics, `internal/budget` package, webhook engine, Grafana dashboard (plus early Resilience/RBAC previews) |
-| **v0.4.0** | Resilience & RBAC | Aug 31 2026 | Crash re-spawn ✅, per-agent ServiceAccounts ✅, `onComplete: create-pr` ✅, `onComplete: push-branch` |
+| **v0.4.0** ✅ | Resilience & RBAC | Aug 31 2026 | Crash re-spawn ✅, per-agent ServiceAccounts ✅, `onComplete: create-pr` ✅, `onComplete: push-branch` ✅ |
 | **v0.5.0** | Template Engine & Helm | Sep 30 2026 | `AgentTeamTemplate`/`AgentTeamRun` controllers, production Helm chart, CONTRIBUTING.md |
-| **v0.6.0** | Operator Dashboard | Oct 5 2026 | Web UI for running AgentTeams: backend API, list + detail views (HTMX + Go templates), live SSE updates, Helm packaging |
+| **v0.6.0** ✅ | Operator Dashboard | Oct 5 2026 | Web UI for running AgentTeams: backend API, list + detail views (HTMX + Go templates), live SSE updates, Helm packaging |
+| **v0.7.0** ✅ | Documentation Site | Jun 30 2026 | mkdocs-material docs site (Diátaxis nav, tutorials, how-tos, concepts, auto-generated API reference), kagents brand, community baseline (COC, CONTRIBUTING, SECURITY), OSSF Scorecard supply-chain hardening, controller-runtime 0.24 + k8s 0.36 + Go 1.26 toolchain |
 | **v1.0.0** | KubeCon Demo Polish | Oct 26 2026 | Demo script, OCI skill distribution, dashboard presentation mode for stage |
 
 **KubeCon talk:** November 9–12 2026, Salt Lake City. CFP submitted May 2026.
 
-### Current Priority (post-v0.3.0)
+### Current Priority (post-v0.7.0)
 
 The next highest-value issues:
-1. **#16** — `onComplete: push-branch` — closes out v0.4.0 alongside the already-merged #13/#14/#15
-2. **#17 / #18** — AgentTeamTemplate + AgentTeamRun controllers (v0.5.0)
-3. **#137–#140** — the operator dashboard (v0.6.0)
+1. **#17 / #18** — AgentTeamTemplate + AgentTeamRun controllers (v0.5.0) — the biggest remaining roadmap chunk
+2. **#175 / #176** — DNS for `kagents.dev` → GitHub Pages (closes out the v0.7.0 docs site narrative)
+3. **#21 / #22 / #141** — KubeCon demo-polish items (v1.0.0)
 
 ### Ask of Claude Code
 
