@@ -65,6 +65,11 @@ jobs:
           make manifests generate
           git diff --exit-code || (echo "CRD manifests or generated code is out of date. Run 'make manifests generate' and commit the result." && exit 1)
 
+      - name: Check API reference docs are up to date
+        run: |
+          make docs-api
+          git diff --exit-code docs/reference/api/ || (echo "API reference docs are out of date. Run 'make docs-api' and commit the result." && exit 1)
+
       - name: Helm lint
         run: |
           curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash

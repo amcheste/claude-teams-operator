@@ -1,23 +1,23 @@
 <div align="center">
 
-<img src="assets/logo.png" alt="kagents mascot" width="200" />
+<img src="assets/banner.png" alt="kagents banner" width="800" />
 
 # kagents
 
 **Run Claude Code Agent Teams as a Kubernetes operator.**
 
 [![Validate](https://github.com/amcheste/claude-teams-operator/actions/workflows/validate.yml/badge.svg)](https://github.com/amcheste/claude-teams-operator/actions/workflows/validate.yml)
-[![Version](https://img.shields.io/github/v/tag/amcheste/claude-teams-operator?label=version&sort=semver)](https://github.com/amcheste/claude-teams-operator/releases)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/github/v/tag/amcheste/claude-teams-operator?label=version&sort=semver&color=0B0B0C)](https://github.com/amcheste/claude-teams-operator/releases)
+[![License](https://img.shields.io/badge/License-Apache_2.0-1F4D3A.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.23-00ADD8)](go.mod)
 
 </div>
 
 ---
 
-> **kagents** is the project brand. The implementation lives in the [`claude-teams-operator`](https://github.com/amcheste/claude-teams-operator) repository and ships under the `claude.amcheste.io/v1alpha1` API group. Documentation site: [kagents.dev](https://kagents.dev) (under construction — see [v0.7.0 milestone](https://github.com/amcheste/claude-teams-operator/milestone/8)).
+> **kagents** is the project brand. The implementation lives in the [`claude-teams-operator`](https://github.com/amcheste/claude-teams-operator) repository and ships under the `claude.amcheste.io/v1alpha1` API group. Documentation site: [kagents.dev](https://kagents.dev) (under construction. See [v0.7.0 milestone](https://github.com/amcheste/claude-teams-operator/milestone/8)).
 
-Claude Code [Agent Teams](https://docs.anthropic.com/en/docs/claude-code/agent-teams) let multiple Claude Code instances collaborate — a lead coordinates work via a shared task list while teammates communicate through peer-to-peer mailboxes. Natively this runs on a single machine using tmux. This operator lifts that pattern into Kubernetes so you can run large-scale agent teams on your cluster.
+Claude Code [Agent Teams](https://docs.anthropic.com/en/docs/claude-code/agent-teams) let multiple Claude Code instances collaborate. A lead coordinates work via a shared task list while teammates communicate through peer-to-peer mailboxes. Natively this runs on a single machine using tmux. This operator lifts that pattern into Kubernetes so you can run large-scale agent teams on your cluster.
 
 ## Modes
 
@@ -32,23 +32,23 @@ Both modes share the same coordination protocol (shared PVCs, mailboxes, task li
 
 ## Features
 
-- **Native Agent Teams protocol** — preserves Anthropic's file-based mailbox and task list format over ReadWriteMany PVCs; no protocol translation
-- **Per-teammate git worktrees** — each coding agent works on an isolated branch to prevent merge conflicts
-- **Cowork mode** — mount ConfigMap/PVC inputs and collect outputs without requiring a git repo
-- **Skills as CRD fields** — mount Claude Code skills from ConfigMaps into each agent's `.claude/skills/`
-- **MCP servers per agent** — configure Model Context Protocol connections per teammate
-- **Approval gates** — pause spawning specific teammates until a human applies an annotation
-- **Budget enforcement** — terminate the team if estimated API cost exceeds a configured limit
-- **Timeout enforcement** — terminate the team after a configurable wall-clock duration
-- **`dependsOn` ordering** — spawn teammates only after their declared dependencies complete
-- **Reusable templates** — define team patterns with `AgentTeamTemplate`, instantiate with `AgentTeamRun`
+- **Native Agent Teams protocol**. Preserves Anthropic's file-based mailbox and task list format over ReadWriteMany PVCs; no protocol translation
+- **Per-teammate git worktrees**. Each coding agent works on an isolated branch to prevent merge conflicts
+- **Cowork mode**. Mount ConfigMap/PVC inputs and collect outputs without requiring a git repo
+- **Skills as CRD fields**. Mount Claude Code skills from ConfigMaps into each agent's `.claude/skills/`
+- **MCP servers per agent**. Configure Model Context Protocol connections per teammate
+- **Approval gates**. Pause spawning specific teammates until a human applies an annotation
+- **Budget enforcement**. Terminate the team if estimated API cost exceeds a configured limit
+- **Timeout enforcement**. Terminate the team after a configurable wall-clock duration
+- **`dependsOn` ordering**. Spawn teammates only after their declared dependencies complete
+- **Reusable templates**. Define team patterns with `AgentTeamTemplate`, instantiate with `AgentTeamRun`
 
 ## Quick Start
 
 ### Prerequisites
 
 - Kubernetes 1.28+
-- ReadWriteMany PVC support (NFS, EFS, or a compatible CSI driver — see [ARCHITECTURE.md § Storage Requirements](ARCHITECTURE.md#storage-requirements) for options)
+- ReadWriteMany PVC support (NFS, EFS, or a compatible CSI driver. See [ARCHITECTURE.md § Storage Requirements](ARCHITECTURE.md#storage-requirements) for options)
 - Claude Code CLI access (Max subscription or API key)
 - Opus 4.6 model access (required for Agent Teams)
 
@@ -222,7 +222,7 @@ The primary resource. Defines the full team, its workspace, lifecycle, and obser
 
 ### AgentTeamTemplate
 
-A reusable team pattern. Does not run on its own — instantiate with `AgentTeamRun`.
+A reusable team pattern. Does not run on its own. Instantiate with `AgentTeamRun`.
 
 ### AgentTeamRun
 
@@ -298,12 +298,12 @@ This README is the entry point. For deeper dives, every topic lives in a dedicat
 
 | Document | Read when you want to… |
 |----------|-----------------------|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Understand how the operator models Agent Teams — phase state machine, PVC layout, RWX storage backends, coordination protocol, key design tradeoffs. |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Understand how the operator models Agent Teams. Phase state machine, PVC layout, RWX storage backends, coordination protocol, key design tradeoffs. |
 | [TESTING.md](TESTING.md) | See the test strategy (unit / integration / acceptance / E2E), how to run each suite, and what each one actually verifies. |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Set up a dev environment, run the full build/test loop, follow the branch + PR workflow, and walk through "How to add a new reconciler feature." |
-| [docs/helm-values.md](docs/helm-values.md) | Tune the Helm chart — every value documented with defaults and production override recipes. |
+| [docs/helm-values.md](docs/helm-values.md) | Tune the Helm chart. Every value documented with defaults and production override recipes. |
 | [SECURITY.md](SECURITY.md) | Report a vulnerability or review the project's security policy. |
-| [KUBECON.md](KUBECON.md) | See the talk framing and "interesting problems" log — useful context for why specific architectural choices were made. |
+| [KUBECON.md](KUBECON.md) | See the talk framing and "interesting problems" log. Useful context for why specific architectural choices were made. |
 
 ## Development
 
