@@ -1,6 +1,6 @@
 # Product Requirements Document: Knowledge Work Orchestrator
 
-**Document owner:** Alan Chester, CAM Labs LLC
+**Document owner:** Alan Chester
 **Last updated:** 2026-05-12
 **Status:** Draft
 **Linear milestone:** v0.8.0 — Knowledge Work Orchestrator
