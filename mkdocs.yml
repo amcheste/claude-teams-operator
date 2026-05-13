@@ -1,13 +1,13 @@
 site_name: kagents
 site_description: Run Claude Code Agent Teams as a Kubernetes operator
 site_url: https://kagents.dev
-site_author: CAM Labs LLC
+site_author: Alan Chester
 
 repo_name: amcheste/claude-teams-operator
 repo_url: https://github.com/amcheste/claude-teams-operator
 edit_uri: edit/main/docs/
 
-copyright: Copyright &copy; 2026 CAM Labs LLC
+copyright: Copyright &copy; 2026 Alan Chester
 
 # Files inside docs/ that aren't part of the public site.
 # `helm-values.md` and `cfp/` predate the docs site and link to repo

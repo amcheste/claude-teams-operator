@@ -10,9 +10,9 @@ keywords:
   - agent
   - kubernetes
   - operator
-home: https://github.com/camlabs/claude-teams-operator
+home: https://github.com/amcheste/claude-teams-operator
 sources:
-  - https://github.com/camlabs/claude-teams-operator
+  - https://github.com/amcheste/claude-teams-operator
 maintainers:
-  - name: CAM Labs
-    url: https://github.com/camlabs
+  - name: Alan Chester
+    url: https://github.com/amcheste

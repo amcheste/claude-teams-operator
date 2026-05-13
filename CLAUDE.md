@@ -108,7 +108,7 @@ Start with Phase 1 (PVC creation + init Job), then work through sequentially.
 
 ## License
 
-Apache 2.0 — CAM Labs LLC
+Apache 2.0
 
 ---
 

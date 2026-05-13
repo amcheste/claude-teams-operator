@@ -2,7 +2,7 @@
 
 ## RFC: `claude-teams-operator`
 
-**Author:** Alan (CAM Labs LLC)
+**Author:** Alan Chester
 **Status:** Draft
 **Date:** April 2026
 
@@ -572,4 +572,4 @@ kubectl apply -f config/samples/auth-refactor-team.yaml
 
 ## License
 
-Apache 2.0 — Open source under CAM Labs LLC.
+Apache 2.0.
