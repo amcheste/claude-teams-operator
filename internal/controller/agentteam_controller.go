@@ -26,13 +26,13 @@ import (
 	claudev1alpha1 "github.com/amcheste/kagents/api/v1alpha1"
 	"github.com/amcheste/kagents/internal/budget"
 	"github.com/amcheste/kagents/internal/github"
+	"github.com/amcheste/kagents/internal/harness"
 	"github.com/amcheste/kagents/internal/metrics"
 	"github.com/amcheste/kagents/internal/webhook"
 )
 
 const (
-	defaultAgentImage = "ghcr.io/amcheste/claude-code-runner:latest"
-	defaultInitImage  = "alpine/git:latest"
+	defaultInitImage = "alpine/git:latest"
 )
 
 // AgentTeamReconciler reconciles an AgentTeam object.
@@ -73,6 +73,32 @@ type AgentTeamReconciler struct {
 	// recordEvent helper tolerates a nil recorder so unit tests that construct
 	// a reconciler directly are not forced to wire one up.
 	Recorder record.EventRecorder
+
+	// Harnesses is the registry of supported agent runtimes, keyed by
+	// spec.harness value. Populated by main.go from harness.DefaultRegistry().
+	// Unit tests that construct a reconciler directly may leave this nil;
+	// harnessFor falls back to a built-in claude-code adapter in that case.
+	Harnesses map[string]harness.Harness
+}
+
+// harnessFor returns the [harness.Harness] adapter that should drive the
+// given team. Selection: team.Spec.Harness (defaulting to claude-code if
+// unset) is looked up in r.Harnesses; if the registry is nil or the named
+// harness isn't registered, the built-in claude-code adapter is returned.
+// Centralizing the fallback here keeps unit tests that don't populate
+// Harnesses working and gives misconfigured CRs a safe default rather than
+// a panic.
+func (r *AgentTeamReconciler) harnessFor(team *claudev1alpha1.AgentTeam) harness.Harness {
+	name := team.Spec.Harness
+	if name == "" {
+		name = harness.DefaultHarness
+	}
+	if r.Harnesses != nil {
+		if h, ok := r.Harnesses[name]; ok {
+			return h
+		}
+	}
+	return harness.ClaudeCode{}
 }
 
 // recordEvent emits an Event against the AgentTeam if a Recorder is configured.
@@ -95,7 +121,10 @@ func (r *AgentTeamReconciler) agentImage() string {
 	if r.AgentImage != "" {
 		return r.AgentImage
 	}
-	return defaultAgentImage
+	// The default runner image comes from the harness adapter rather than a
+	// hardcoded operator constant. With claude-code as the only registered
+	// harness today, this evaluates to the same image as the old constant.
+	return harness.ClaudeCode{}.DefaultImage()
 }
 
 func (r *AgentTeamReconciler) initImage() string {
@@ -1125,15 +1154,15 @@ func (r *AgentTeamReconciler) buildAgentPod(
 		"kagents.dev/role":            role,
 	}
 
-	envVars := []corev1.EnvVar{
-		{Name: "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", Value: "1"},
-		{Name: "CLAUDE_CODE_TEAM_NAME", Value: team.Name},
-		{Name: "CLAUDE_CODE_AGENT_NAME", Value: agentName},
-		{Name: "CLAUDE_CODE_ROLE", Value: role},
-		{Name: "CLAUDE_MODEL", Value: model},
-		{Name: "CLAUDE_PERMISSION_MODE", Value: permissionMode},
-		{Name: "AGENT_PROMPT", Value: prompt},
-	}
+	// Protocol-activation env vars come from the harness adapter; everything
+	// else (model selection, permission mode, prompt, auth, scope) is
+	// harness-neutral and contributed by the operator itself.
+	envVars := r.harnessFor(team).ProtocolEnv(harness.AgentRole(role), agentName, team)
+	envVars = append(envVars,
+		corev1.EnvVar{Name: "CLAUDE_MODEL", Value: model},
+		corev1.EnvVar{Name: "CLAUDE_PERMISSION_MODE", Value: permissionMode},
+		corev1.EnvVar{Name: "AGENT_PROMPT", Value: prompt},
+	)
 
 	// Auth: prefer API key, fall back to OAuth.
 	if team.Spec.Auth.APIKeySecret != "" {
