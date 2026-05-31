@@ -1,6 +1,6 @@
 # Product Vision — kagents
 
-> **Status:** Draft for review (v0.8.0 milestone, [AMC-137](https://linear.app/amcheste/issue/AMC-137))
+> **Status:** Draft for review
 > **Audience:** maintainers, contributors, and anyone evaluating the project's direction
 > **Companion docs:** [Product Requirements](knowledge-work-prd.md) · [Technical Design](knowledge-work-design.md)
 
@@ -118,4 +118,4 @@ Vanity metric to avoid: raw token spend or pod-hours with no artifact attached. 
 
 kagents didn't start here — it's earned the right to this pivot. v0.1–v0.7 delivered the operator core, crash resilience and per-agent RBAC, the template/run controllers, the dashboard, and a full documentation site. Knowledge-work mode (Cowork) already exists as a runtime path. **v0.8.0 is where knowledge work stops being a secondary mode and becomes the headline** — adding pipelines, scheduling, event triggers, structured artifact handoff, result delivery, and OCI-distributed skills, plus a positioning reframe that leads with Cowork.
 
-See the [PRD](knowledge-work-prd.md) for the feature-by-feature requirements (mapped to [AMC-129](https://linear.app/amcheste/issue/AMC-129)–[AMC-136](https://linear.app/amcheste/issue/AMC-136)) and the [Technical Design](knowledge-work-design.md) for how it's built.
+See the [PRD](knowledge-work-prd.md) for the feature-by-feature requirements and the [Technical Design](knowledge-work-design.md) for how it's built.

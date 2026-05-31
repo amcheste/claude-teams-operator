@@ -1,15 +1,15 @@
 # Technical Design — kagents Knowledge Work Orchestrator
 
-> **Status:** Draft for review ([AMC-137](https://linear.app/amcheste/issue/AMC-137))
-> **Audience:** implementers of the rebrand ([AMC-152](https://linear.app/amcheste/issue/AMC-152)–156) and the knowledge-work features ([AMC-129](https://linear.app/amcheste/issue/AMC-129)–136)
-> **Companion docs:** [Product Vision](product-vision.md) · [PRD](knowledge-work-prd.md) *(forthcoming)*
+> **Status:** Draft for review
+> **Audience:** implementers of the rebrand and the knowledge-work features
+> **Companion docs:** [Product Vision](product-vision.md) · [PRD](knowledge-work-prd.md)
 
 ## Scope and reading order
 
 This document specifies two bodies of work, in the order they execute:
 
-- **Part I — Rebrand & harness abstraction.** Neutralize the Claude-specific identity (module path, API group, brand) and introduce a thin harness-adapter seam. Lands *first* so everything below is born under the `kagents.dev` API group. Maps to the **kagents rebrand & harness abstraction** milestone (AMC-152–156).
-- **Part II — Knowledge-work CRD architecture.** Output routing, pipelines, scheduling, event triggers, result delivery, OCI skills, and pipeline-aware observability. Maps to the **Knowledge Work Orchestrator** milestone (AMC-130–136).
+- **Part I — Rebrand & harness abstraction.** Neutralize the Claude-specific identity (module path, API group, brand) and introduce a thin harness-adapter seam. Lands *first* so everything below is born under the `kagents.dev` API group. Maps to the **kagents rebrand & harness abstraction** milestone.
+- **Part II — Knowledge-work CRD architecture.** Output routing, pipelines, scheduling, event triggers, result delivery, OCI skills, and pipeline-aware observability. Maps to the **Knowledge Work Orchestrator** milestone.
 
 Read [ARCHITECTURE.md](../ARCHITECTURE.md) first for the current operator design (phases, PVC layout, coordination protocol). This document describes the *deltas* from that baseline.
 
@@ -19,7 +19,7 @@ A guiding constraint throughout: **the operator already does not speak the agent
 
 # Part I — Rebrand & harness abstraction
 
-## I.1 The harness adapter seam (AMC-155)
+## I.1 The harness adapter seam
 
 ### Goal
 
@@ -71,16 +71,16 @@ Backward compatible: existing CRs omit it and get identical behavior. This is th
 
 Use a CEL validation rule (`x-kubernetes-validations`) on the model field to defer model-set validation to runtime where the adapter is known, rather than a static enum. (See [I.4](#i4-no-admission-webhooks-use-cel) on why we avoid admission webhooks.)
 
-## I.2 Module path migration (AMC-153)
+## I.2 Module path migration
 
 `github.com/amcheste/claude-teams-operator` → `github.com/amcheste/kagents`.
 
 - Mechanical: `go.mod` module directive + every internal import across `api/`, `cmd/`, `internal/`, `test/`; Dockerfile build targets; Makefile; CI workflow refs.
 - Regenerate: `make generate manifests` (regenerates deepcopy headers and CRD paths).
 - Atomic PR — the module path cannot be half-migrated. Land/close open PRs first.
-- **Depends on the repo rename ([AMC-152](https://linear.app/amcheste/issue/AMC-152))** so the module path matches the canonical repo location.
+- **Depends on the repo rename** so the module path matches the canonical repo location.
 
-## I.3 API group migration — clean break (AMC-154)
+## I.3 API group migration — clean break
 
 `claude.amcheste.io/v1alpha1` → `kagents.dev/v1alpha1`. Version stays `v1alpha1`; only the group changes. Using the owned domain as the group is the K8s convention (`cert-manager.io`, `argoproj.io`).
 
@@ -118,7 +118,7 @@ MIGRATION.md states plainly: this is a one-time breaking change made deliberatel
 
 ## I.4 No admission webhooks — use CEL
 
-Several knowledge-work features need cross-field validation (e.g. AMC-131's "`pipeline` and flat `dependsOn` are mutually exclusive"). The project currently ships **no admission webhooks** by design (no webhook server, no cert wiring). We keep it that way and use **CRD CEL validation rules** (`x-kubernetes-validations`, GA since k8s 1.25; we're on 0.36):
+Several knowledge-work features need cross-field validation (e.g. "`pipeline` and flat `dependsOn` are mutually exclusive"). The project currently ships **no admission webhooks** by design (no webhook server, no cert wiring). We keep it that way and use **CRD CEL validation rules** (`x-kubernetes-validations`, GA since k8s 1.25; we're on 0.36):
 
 ```go
 // +kubebuilder:validation:XValidation:rule="!(has(self.pipeline) && self.teammates.exists(t, has(t.dependsOn)))",message="spec.pipeline and spec.teammates[].dependsOn are mutually exclusive"
@@ -141,7 +141,7 @@ This keeps the no-webhook architecture, avoids cert-manager/Service plumbing, an
 
 All examples below use the post-rebrand `kagents.dev/v1alpha1` group. These features are designed *together* so they compose; [II.8](#ii8-how-the-pieces-compose) is the load-bearing section.
 
-## II.1 Output routing (AMC-130)
+## II.1 Output routing
 
 Structured artifact handoff: a teammate's declared outputs become a downstream teammate's mounted inputs.
 
@@ -170,7 +170,7 @@ teammates:
 
 **Design note — how artifacts move:** all agents already share the output PVC (RWX). "Routing" is therefore a *copy/symlink within one volume*, not a cross-volume transfer — cheap, no new volume plumbing. The operator runs the copy itself (it has no need to speak the agent protocol to move files). For coding mode, the analogous handoff is the existing git-worktree/branch mechanism; output routing is a Cowork-mode concern.
 
-## II.2 Pipeline stages (AMC-131)
+## II.2 Pipeline stages
 
 `spec.pipeline` models multi-stage workflows with explicit fan-out/merge, as an alternative to flat per-teammate `dependsOn`.
 
@@ -200,7 +200,7 @@ spec:
 
 **`approvalRequired`** reuses the existing approval-gate annotation mechanism (`approved.kagents.dev/stage-{name}`), not a new system.
 
-## II.3 AgentTeamSchedule (AMC-132)
+## II.3 AgentTeamSchedule
 
 A new CRD that instantiates teams on a cron schedule — the operator's "CronJob for knowledge work."
 
@@ -221,7 +221,7 @@ spec:
 
 **Status:** `lastScheduledAt`, `nextScheduledAt`, `activeRun`, `runs[]`.
 
-## II.4 AgentTeamTrigger (AMC-135)
+## II.4 AgentTeamTrigger
 
 A new CRD that instantiates teams in response to external events.
 
@@ -243,7 +243,7 @@ spec:
 
 **Design decision — server topology:** run the webhook listener as its **own Deployment/Service** (`kagents-trigger`), *not* folded into the operator's manager process. Rationale: it's an ingress-exposed, internet-reachable surface with a very different security/scaling profile from the reconcile loop; coupling it to the manager would put a public endpoint in the leader-elected controller pod. This mirrors how the dashboard already ships as a separate, optional sub-deployment. Gated behind a Helm value (`trigger.enabled`, default false).
 
-## II.5 Result delivery (AMC-133)
+## II.5 Result delivery
 
 A new `onComplete: deliver` mode plus a `delivery[]` list of targets.
 
@@ -263,7 +263,7 @@ lifecycle:
 
 **Security:** the delivery Job (not the operator) consumes the `credentialsSecret`s, mounted only into that Job's pod — the operator never reads SMTP/Drive creds, consistent with the existing MCP-credential handling in ARCHITECTURE.md §MCP Servers.
 
-## II.6 OCI skill distribution (AMC-134)
+## II.6 OCI skill distribution
 
 Extend skill sources from ConfigMap-only to OCI artifacts.
 
@@ -281,11 +281,11 @@ teammates:
 
 **Harness interaction:** skills are a Claude-Code concept today (`~/.claude/skills/`). The *mount path* is harness-specific, so the skill-mount step is contributed by the harness adapter ([I.1](#i1-the-harness-adapter-seam-amc-155)); the OCI *pull* is harness-neutral.
 
-## II.7 Pipeline-aware observability (AMC-136)
+## II.7 Pipeline-aware observability
 
-The status fields introduced by AMC-130 (`status.artifacts`) and AMC-131 (`status.pipeline`) are the data; this is the surfacing layer.
+The status fields introduced by output routing (`status.artifacts`) and pipelines (`status.pipeline`) are the data; this is the surfacing layer.
 
-**Prometheus metrics:** `kagents_team_stage_duration_seconds` (histogram), `kagents_team_artifacts_produced_total` (counter), `kagents_team_pipeline_stage_active` (gauge), `kagents_team_delivery_success_total` / `_failure_total` (counters). *(Note the metric prefix rebrands `claude_` → `kagents_`; fold this into the AMC-154 sweep so dashboards/alerts change once.)*
+**Prometheus metrics:** `kagents_team_stage_duration_seconds` (histogram), `kagents_team_artifacts_produced_total` (counter), `kagents_team_pipeline_stage_active` (gauge), `kagents_team_delivery_success_total` / `_failure_total` (counters). *(Note the metric prefix rebrands `claude_` → `kagents_`; fold this into the API-group migration sweep so dashboards/alerts change once.)*
 
 **Dashboard:** stage progress bar in the team detail view; artifact list with download links. Extends the existing SSE-driven dashboard.
 
@@ -314,14 +314,14 @@ Key composition decisions:
 
 Per the "rebrand first" decision, and a suggested renumber (rebrand = v0.8.0, knowledge work = v0.9.0):
 
-**Milestone 1 — rebrand (AMC-152–156):** repo rename → module path → API group (clean break) → harness seam → image/chart names. Strictly first.
+**Milestone 1 — rebrand:** repo rename → module path → API group (clean break) → harness seam → image/chart names. Strictly first.
 
 **Milestone 2 — knowledge work, suggested order:**
-1. **Output routing (AMC-130)** + **pipeline (AMC-131)** — the core primitives; everything else references them.
-2. **AgentTeamSchedule (AMC-132)** + **AgentTeamTrigger (AMC-135)** — instantiation, both on the shared `AgentTeamRun` path.
-3. **Delivery (AMC-133)** + **OCI skills (AMC-134)** — integrations; delivery starts with the webhook target.
-4. **Observability (AMC-136)** — cross-cutting, lands last so it can surface all the above.
-5. **README/positioning reframe (AMC-129)** — lands with or just after the features it describes.
+1. **Output routing** + **pipeline** — the core primitives; everything else references them.
+2. **AgentTeamSchedule** + **AgentTeamTrigger** — instantiation, both on the shared `AgentTeamRun` path.
+3. **Delivery** + **OCI skills** — integrations; delivery starts with the webhook target.
+4. **Observability** — cross-cutting, lands last so it can surface all the above.
+5. **README/positioning reframe** — lands with or just after the features it describes.
 
 ## II.10 Testing strategy
 

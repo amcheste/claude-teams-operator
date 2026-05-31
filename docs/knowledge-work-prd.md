@@ -1,14 +1,14 @@
 # Product Requirements — kagents Knowledge Work Orchestrator
 
-> **Status:** Draft for review ([AMC-137](https://linear.app/amcheste/issue/AMC-137))
+> **Status:** Draft for review
 > **Audience:** maintainer + contributors scoping and accepting the v0.8.x/v0.9.x work
 > **Companion docs:** [Product Vision](product-vision.md) (why) · this doc (what) · [Technical Design](knowledge-work-design.md) (how)
 
 ## How to read this
 
-The [vision](product-vision.md) sets direction; this PRD turns it into concrete, acceptance-testable requirements; the [design](knowledge-work-design.md) says how each is built. Requirements here are intentionally **outcome-level** — detailed mechanism and field-by-field specs live in the design doc and the linked Linear issues.
+The [vision](product-vision.md) sets direction; this PRD turns it into concrete, acceptance-testable requirements; the [design](knowledge-work-design.md) says how each is built. Requirements here are intentionally **outcome-level** — detailed mechanism and field-by-field specs live in the design doc.
 
-Requirements are grouped as **FR-0** (identity & harness — the rebrand, ships first) and **FR-1…FR-8** (the knowledge-work capabilities). Each maps to a Linear issue and a milestone.
+Requirements are grouped as **FR-0** (identity & harness — the rebrand, ships first) and **FR-1…FR-8** (the knowledge-work capabilities). Each maps to a milestone.
 
 ## Personas
 
@@ -18,19 +18,19 @@ Requirements are grouped as **FR-0** (identity & harness — the rebrand, ships 
 
 ## Requirements overview
 
-| Req | Capability | Issue | Milestone | Priority |
-|-----|-----------|-------|-----------|----------|
-| FR-0a | Repo / module / brand rename | [AMC-152](https://linear.app/amcheste/issue/AMC-152)/[153](https://linear.app/amcheste/issue/AMC-153)/[156](https://linear.app/amcheste/issue/AMC-156) | Rebrand | High |
-| FR-0b | API group → `kagents.dev` (clean break) | [AMC-154](https://linear.app/amcheste/issue/AMC-154) | Rebrand | High |
-| FR-0c | Harness adapter seam (`spec.harness`) | [AMC-155](https://linear.app/amcheste/issue/AMC-155) | Rebrand | High |
-| FR-1 | Pipeline stages (fan-out/merge) | [AMC-131](https://linear.app/amcheste/issue/AMC-131) | Knowledge Work | High |
-| FR-2 | Output routing between teammates | [AMC-130](https://linear.app/amcheste/issue/AMC-130) | Knowledge Work | High |
-| FR-3 | Cron scheduling (`AgentTeamSchedule`) | [AMC-132](https://linear.app/amcheste/issue/AMC-132) | Knowledge Work | High |
-| FR-4 | Event triggers (`AgentTeamTrigger`) | [AMC-135](https://linear.app/amcheste/issue/AMC-135) | Knowledge Work | Medium |
-| FR-5 | Result delivery (Slack/email/Drive/webhook) | [AMC-133](https://linear.app/amcheste/issue/AMC-133) | Knowledge Work | Medium |
-| FR-6 | OCI skill distribution | [AMC-134](https://linear.app/amcheste/issue/AMC-134) | Knowledge Work | Medium |
-| FR-7 | Pipeline-aware observability | [AMC-136](https://linear.app/amcheste/issue/AMC-136) | Knowledge Work | Low |
-| FR-8 | Positioning / README reframe | [AMC-129](https://linear.app/amcheste/issue/AMC-129) | Knowledge Work | Medium |
+| Req | Capability | Milestone | Priority |
+|-----|-----------|-----------|----------|
+| FR-0a | Repo / module / brand rename | Rebrand | High |
+| FR-0b | API group → `kagents.dev` (clean break) | Rebrand | High |
+| FR-0c | Harness adapter seam (`spec.harness`) | Rebrand | High |
+| FR-1 | Pipeline stages (fan-out/merge) | Knowledge Work | High |
+| FR-2 | Output routing between teammates | Knowledge Work | High |
+| FR-3 | Cron scheduling (`AgentTeamSchedule`) | Knowledge Work | High |
+| FR-4 | Event triggers (`AgentTeamTrigger`) | Knowledge Work | Medium |
+| FR-5 | Result delivery (Slack/email/Drive/webhook) | Knowledge Work | Medium |
+| FR-6 | OCI skill distribution | Knowledge Work | Medium |
+| FR-7 | Pipeline-aware observability | Knowledge Work | Low |
+| FR-8 | Positioning / README reframe | Knowledge Work | Medium |
 
 ---
 
