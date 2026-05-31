@@ -2,6 +2,10 @@
 
 This document describes the design of the claude-teams-operator: how it models Claude Code Agent Teams as Kubernetes resources, why key decisions were made, and how the components fit together.
 
+> **Where the project is heading (kagents).** The project is pivoting to the harness-agnostic **kagents** brand — a Kubernetes-native knowledge-work orchestrator, with Claude Code as the first supported agent harness. The canonical forward plan lives in three docs:
+> [Product Vision](docs/product-vision.md) (why) · [Product Requirements](docs/knowledge-work-prd.md) (what) · [Technical Design](docs/knowledge-work-design.md) (how).
+> This document describes the system **as built today**; the design doc describes the deltas (rebrand, harness adapter seam, pipelines, scheduling, triggers, delivery, OCI skills) as they land.
+
 ## Overview
 
 The operator watches `AgentTeam` custom resources and reconciles the cluster toward the desired state. At steady state, a running team looks like this:
