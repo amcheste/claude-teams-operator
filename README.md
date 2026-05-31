@@ -15,7 +15,7 @@
 
 ---
 
-> **kagents** is the project brand. The implementation lives in the [`claude-teams-operator`](https://github.com/amcheste/kagents) repository and ships under the `claude.amcheste.io/v1alpha1` API group. Documentation site: [kagents.dev](https://kagents.dev) (under construction. See [v0.7.0 milestone](https://github.com/amcheste/kagents/milestone/8)).
+> **kagents** is the project brand. The implementation lives in the [`claude-teams-operator`](https://github.com/amcheste/kagents) repository and ships under the `kagents.dev/v1alpha1` API group. Documentation site: [kagents.dev](https://kagents.dev) (under construction. See [v0.7.0 milestone](https://github.com/amcheste/kagents/milestone/8)).
 
 Claude Code [Agent Teams](https://docs.anthropic.com/en/docs/claude-code/agent-teams) let multiple Claude Code instances collaborate. A lead coordinates work via a shared task list while teammates communicate through peer-to-peer mailboxes. Natively this runs on a single machine using tmux. This operator lifts that pattern into Kubernetes so you can run large-scale agent teams on your cluster.
 
@@ -103,7 +103,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full dev loop (testing, linting, 
 ## Example: Coding Team
 
 ```yaml
-apiVersion: claude.amcheste.io/v1alpha1
+apiVersion: kagents.dev/v1alpha1
 kind: AgentTeam
 metadata:
   name: auth-refactor
@@ -148,7 +148,7 @@ spec:
 ## Example: Cowork Team
 
 ```yaml
-apiVersion: claude.amcheste.io/v1alpha1
+apiVersion: kagents.dev/v1alpha1
 kind: AgentTeam
 metadata:
   name: q3-report
@@ -198,7 +198,7 @@ Grant approval after reviewing the researcher's output:
 
 ```bash
 kubectl annotate agentteam q3-report \
-  "approved.claude.amcheste.io/spawn-email-drafter=true" \
+  "approved.kagents.dev/spawn-email-drafter=true" \
   -n cowork-agents
 ```
 
@@ -229,7 +229,7 @@ A reusable team pattern. Does not run on its own. Instantiate with `AgentTeamRun
 Instantiates an `AgentTeamTemplate` against a specific repo or workspace.
 
 ```yaml
-apiVersion: claude.amcheste.io/v1alpha1
+apiVersion: kagents.dev/v1alpha1
 kind: AgentTeamRun
 metadata:
   name: q4-security-review
@@ -287,7 +287,7 @@ kubectl get agentteam my-team -o jsonpath='{.status.teammates[*].pendingApproval
 
 # Grant approval
 kubectl annotate agentteam my-team \
-  "approved.claude.amcheste.io/spawn-email-drafter=true"
+  "approved.kagents.dev/spawn-email-drafter=true"
 ```
 
 If `channel: webhook` is set, the operator POSTs a JSON payload to `webhookUrl` when the gate is triggered, allowing an external system to present the approval to a human and then apply the annotation.
@@ -303,6 +303,7 @@ This README is the entry point. For deeper dives, every topic lives in a dedicat
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Set up a dev environment, run the full build/test loop, follow the branch + PR workflow, and walk through "How to add a new reconciler feature." |
 | [docs/helm-values.md](docs/helm-values.md) | Tune the Helm chart. Every value documented with defaults and production override recipes. |
 | [SECURITY.md](SECURITY.md) | Report a vulnerability or review the project's security policy. |
+| [MIGRATION.md](MIGRATION.md) | Upgrade between kagents versions. Currently covers the v0.7.x → v0.8.0 API-group migration (`claude.amcheste.io` → `kagents.dev`). |
 | [KUBECON.md](KUBECON.md) | See the talk framing and "interesting problems" log. Useful context for why specific architectural choices were made. |
 
 ## Development

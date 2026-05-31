@@ -101,7 +101,7 @@ jobs:
           kubectl get agentteams -A -o wide || true
 
           echo "=== Pods in test namespaces ==="
-          kubectl get pods -A --selector='claude.amcheste.io/team' -o wide || true
+          kubectl get pods -A --selector='kagents.dev/team' -o wide || true
 
           echo "=== Recent events ==="
           kubectl get events -A --sort-by='.lastTimestamp' | tail -50 || true

@@ -11,7 +11,7 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/component: dashboard
 rules:
-  - apiGroups: ["claude.amcheste.io"]
+  - apiGroups: ["kagents.dev"]
     resources: ["agentteams", "agentteamtemplates", "agentteamruns"]
     verbs: ["get", "list", "watch"]
   - apiGroups: [""]

@@ -35,9 +35,9 @@ var validModels = map[string]struct{}{
 	"haiku":  {},
 }
 
-// +kubebuilder:rbac:groups=claude.amcheste.io,resources=agentteamtemplates,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=claude.amcheste.io,resources=agentteamtemplates/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=claude.amcheste.io,resources=agentteamtemplates/finalizers,verbs=update
+// +kubebuilder:rbac:groups=kagents.dev,resources=agentteamtemplates,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=kagents.dev,resources=agentteamtemplates/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=kagents.dev,resources=agentteamtemplates/finalizers,verbs=update
 
 func (r *AgentTeamTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)

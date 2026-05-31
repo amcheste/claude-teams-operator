@@ -376,7 +376,7 @@ var _ = Describe("AgentTeam operator — acceptance", func() {
 			if t.Annotations == nil {
 				t.Annotations = map[string]string{}
 			}
-			t.Annotations["approved.claude.amcheste.io/spawn-gated"] = "true"
+			t.Annotations["approved.kagents.dev/spawn-gated"] = "true"
 			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
 
 			// Gated teammate should now be spawned.

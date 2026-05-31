@@ -334,7 +334,7 @@ Per the "rebrand first" decision, and a suggested renumber (rebrand = v0.8.0, kn
 | Trigger | HMAC validation, payload ConfigMap injection, `concurrencyPolicy` | unit (httptest) for the server; envtest for run creation |
 | Delivery | each target type; failure-doesn't-fail-team | unit per `internal/delivery/*` with mock endpoints |
 | OCI skills | pull → mount, ConfigMap fallback, digest cache | unit for resolution; e2e (real `oras` pull from ghcr) |
-| Migration | no `claude.amcheste.io` / old module path remains; CRDs install under new group | grep gate in CI + envtest install smoke |
+| Migration | no `kagents.dev` / old module path remains; CRDs install under new group | grep gate in CI + envtest install smoke |
 
 New CRDs (`AgentTeamSchedule`, `AgentTeamTrigger`) each get their own envtest integration suite mirroring the existing `agentteamrun_integration_test.go` pattern.
 

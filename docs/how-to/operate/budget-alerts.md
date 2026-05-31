@@ -9,7 +9,7 @@ For how the budget estimate is computed and its honest limitations, see the [Ope
 The hard stop. When a team's `status.estimatedCostUsd` crosses `spec.lifecycle.budgetLimit`, the operator deletes all the team's pods and transitions the phase to `BudgetExceeded`.
 
 ```yaml
-apiVersion: claude.amcheste.io/v1alpha1
+apiVersion: kagents.dev/v1alpha1
 kind: AgentTeam
 metadata:
   name: nightly-security-review
