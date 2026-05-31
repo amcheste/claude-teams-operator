@@ -12,7 +12,7 @@
       }
     ]
   },
-  "description": "Claude Agent Teams — live view of active teams, cost burn, budget headroom, and teammate health. Metrics are exported by the claude-teams-operator.",
+  "description": "Claude Agent Teams — live view of active teams, cost burn, budget headroom, and teammate health. Metrics are exported by the kagents.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,

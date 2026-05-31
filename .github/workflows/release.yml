@@ -141,7 +141,7 @@ jobs:
           # values.yaml ships tag: latest for both operator and runner. At
           # release time we pin both to the release tag so `helm install
           # --version=vX.Y.Z` pulls matching images by default.
-          sed -i "s|tag: latest|tag: ${TAG}|g" charts/claude-teams-operator/values.yaml
+          sed -i "s|tag: latest|tag: ${TAG}|g" charts/kagents/values.yaml
 
       - name: Log in to GitHub Container Registry
         run: |
@@ -154,10 +154,10 @@ jobs:
         run: |
           # Helm chart versions must be SemVer without a leading 'v'.
           VERSION_NUM="${TAG#v}"
-          helm package charts/claude-teams-operator \
+          helm package charts/kagents \
             --version "${VERSION_NUM}" \
             --app-version "${VERSION_NUM}"
-          helm push "claude-teams-operator-${VERSION_NUM}.tgz" \
+          helm push "kagents-${VERSION_NUM}.tgz" \
             oci://ghcr.io/amcheste/charts
 
   # ── Create GitHub Release ─────────────────────────────────────────────────
@@ -202,7 +202,7 @@ jobs:
 
             ```bash
             # Helm (recommended)
-            helm install claude-teams-operator oci://ghcr.io/amcheste/charts/claude-teams-operator \
+            helm install kagents oci://ghcr.io/amcheste/charts/kagents \
               --version ${{ steps.prerelease.outputs.version_num }}
 
             # Raw manifests

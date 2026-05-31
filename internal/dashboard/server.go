@@ -1,5 +1,5 @@
 // Package dashboard implements the read-only HTTP API that backs the
-// claude-teams-operator web UI. The API exposes AgentTeam list/detail,
+// kagents web UI. The API exposes AgentTeam list/detail,
 // pod log streaming, and a health endpoint. Live-update SSE will land in
 // the v0.6.0 follow-up (#139) — the Server type already carries a context
 // so adding it doesn't require an API rewrite.

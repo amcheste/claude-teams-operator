@@ -1,5 +1,5 @@
 apiVersion: v2
-name: claude-teams-operator
+name: kagents
 description: A Kubernetes operator for running Claude Code Agent Teams as distributed pods
 type: application
 version: 0.7.0

@@ -1,4 +1,4 @@
-claude-teams-operator {{ .Chart.AppVersion }} installed in namespace {{ .Release.Namespace }}.
+kagents {{ .Chart.AppVersion }} installed in namespace {{ .Release.Namespace }}.
 
 # 1. Verify the operator is running
 kubectl rollout status deployment/{{ .Release.Name }}-controller-manager \
@@ -49,7 +49,7 @@ sidecar will auto-import it into Grafana within ~30s.
 {{- if not .Values.metrics.serviceMonitor.enabled }}
 
 Metrics ServiceMonitor is OFF. Enable with:
-  helm upgrade {{ .Release.Name }} ./charts/claude-teams-operator \
+  helm upgrade {{ .Release.Name }} ./charts/kagents \
     --set metrics.serviceMonitor.enabled=true
 
 {{- end }}
@@ -69,7 +69,7 @@ Ingress is enabled — the dashboard is also reachable at:
 {{- else }}
 
 Dashboard is OFF. Enable with:
-  helm upgrade {{ .Release.Name }} ./charts/claude-teams-operator \
+  helm upgrade {{ .Release.Name }} ./charts/kagents \
     --set dashboard.enabled=true
 
 {{- end }}

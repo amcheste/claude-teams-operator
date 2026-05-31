@@ -1,4 +1,4 @@
-# Default values for claude-teams-operator
+# Default values for kagents
 
 replicaCount: 1
 
@@ -20,7 +20,7 @@ imagePullSecrets: []
 # Service account for the operator
 serviceAccount:
   create: true
-  name: claude-teams-operator
+  name: kagents
 
 # Operator pod resources
 resources:

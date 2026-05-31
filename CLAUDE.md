@@ -1,4 +1,4 @@
-# claude-teams-operator
+# kagents
 
 A Kubernetes operator that runs Claude Code Agent Teams as distributed pods on a K8s cluster.
 

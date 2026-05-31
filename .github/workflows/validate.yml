@@ -73,7 +73,7 @@ jobs:
       - name: Helm lint
         run: |
           curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-          helm lint ./charts/claude-teams-operator
+          helm lint ./charts/kagents
 
   # ── Unit & Integration Tests ───────────────────────────────────────────────
   test:
@@ -116,7 +116,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Build operator Docker image
-        run: docker build -f docker/Dockerfile.operator -t claude-teams-operator:ci .
+        run: docker build -f docker/Dockerfile.operator -t kagents:ci .
 
       - name: Build runner Docker image
         run: docker build -f docker/Dockerfile.claude-code -t claude-code-runner:ci .

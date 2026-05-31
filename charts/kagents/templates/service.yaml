@@ -5,13 +5,13 @@ metadata:
   name: {{ .Release.Name }}-metrics
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: claude-teams-operator
+    app.kubernetes.io/name: kagents
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/component: metrics
 spec:
   type: ClusterIP
   selector:
-    app.kubernetes.io/name: claude-teams-operator
+    app.kubernetes.io/name: kagents
     app.kubernetes.io/instance: {{ .Release.Name }}
   ports:
     - name: metrics

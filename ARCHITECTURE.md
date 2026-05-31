@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the design of the claude-teams-operator: how it models Claude Code Agent Teams as Kubernetes resources, why key decisions were made, and how the components fit together.
+This document describes the design of the kagents: how it models Claude Code Agent Teams as Kubernetes resources, why key decisions were made, and how the components fit together.
 
 > **Where the project is heading (kagents).** The project is pivoting to the harness-agnostic **kagents** brand — a Kubernetes-native knowledge-work orchestrator, with Claude Code as the first supported agent harness. The canonical forward plan lives in three docs:
 > [Product Vision](docs/product-vision.md) (why) · [Product Requirements](docs/knowledge-work-prd.md) (what) · [Technical Design](docs/knowledge-work-design.md) (how).
@@ -261,7 +261,7 @@ docker/
   Dockerfile.claude-code   # Claude Code runner image (agent pods)
   entrypoint.sh            # Agent pod startup: symlinks, skills, MCP, launch
 
-charts/claude-teams-operator/  # Helm chart
+charts/kagents/  # Helm chart
 
 hack/
   kind-setup.sh            # Kind cluster + NFS provisioner dev setup

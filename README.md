@@ -15,7 +15,7 @@
 
 ---
 
-> **kagents** is the project brand. The implementation lives in the [`claude-teams-operator`](https://github.com/amcheste/kagents) repository and ships under the `kagents.dev/v1alpha1` API group. Documentation site: [kagents.dev](https://kagents.dev) (under construction. See [v0.7.0 milestone](https://github.com/amcheste/kagents/milestone/8)).
+> **kagents** is the project brand. The implementation lives in the [`kagents`](https://github.com/amcheste/kagents) repository and ships under the `kagents.dev/v1alpha1` API group. Documentation site: [kagents.dev](https://kagents.dev) (under construction. See [v0.7.0 milestone](https://github.com/amcheste/kagents/milestone/8)).
 
 Claude Code [Agent Teams](https://docs.anthropic.com/en/docs/claude-code/agent-teams) let multiple Claude Code instances collaborate. A lead coordinates work via a shared task list while teammates communicate through peer-to-peer mailboxes. Natively this runs on a single machine using tmux. This operator lifts that pattern into Kubernetes so you can run large-scale agent teams on your cluster.
 
@@ -56,8 +56,8 @@ Both modes share the same coordination protocol (shared PVCs, mailboxes, task li
 
 ```bash
 # 1. Install the operator (CRDs + controller + RBAC)
-helm install claude-teams-operator \
-  oci://ghcr.io/amcheste/charts/claude-teams-operator \
+helm install kagents \
+  oci://ghcr.io/amcheste/charts/kagents \
   --namespace claude-teams-system --create-namespace
 
 # 2. Create an API key secret in the namespace where your teams will run

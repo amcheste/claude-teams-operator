@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for considering a contribution to **kagents** (the [`claude-teams-operator`](https://github.com/amcheste/kagents) repo). This guide covers everything from setting up your dev environment to opening your first PR.
+Thank you for considering a contribution to **kagents** (the [`kagents`](https://github.com/amcheste/kagents) repo). This guide covers everything from setting up your dev environment to opening your first PR.
 
 If you're new here, the fastest orientation:
 
@@ -15,7 +15,7 @@ This project adopts the [Contributor Covenant Code of Conduct, version 2.1](CODE
 
 ## Issue tracking
 
-This project uses **Linear** (team `AMC`, project `claude-teams-operator`) as the source of truth for issue tracking. Linear ↔ GitHub sync mirrors issues both ways: a Linear issue gets a GitHub mirror, and a PR that references the Linear ID (`Fixes AMC-N` in the PR body or any commit message) auto-closes the Linear ticket on merge.
+This project uses **Linear** (team `AMC`, project `kagents`) as the source of truth for issue tracking. Linear ↔ GitHub sync mirrors issues both ways: a Linear issue gets a GitHub mirror, and a PR that references the Linear ID (`Fixes AMC-N` in the PR body or any commit message) auto-closes the Linear ticket on merge.
 
 For external contributors who don't have Linear access:
 
@@ -24,7 +24,7 @@ For external contributors who don't have Linear access:
 
 For maintainers and regular contributors:
 
-- Open or claim issues in Linear directly via [save_issue](https://linear.app/amcheste/project/claude-teams-operator-32aab082f36b) (or the Linear UI).
+- Open or claim issues in Linear directly via [save_issue](https://linear.app/amcheste/project/kagents-32aab082f36b) (or the Linear UI).
 - PRs to `develop` are required to reference an `AMC-N` ID or carry a `No-Linear-Issue: <reason>` trailer. The `Linear Issue Reference` CI check enforces this.
 
 ## Good first issues
@@ -210,7 +210,7 @@ The doc comment becomes the CRD's OpenAPI description. Write it for someone read
 make manifests generate
 ```
 
-This rewrites `config/crd/bases/*.yaml`, `charts/claude-teams-operator/crds/*.yaml`, and `api/v1alpha1/zz_generated.deepcopy.go`. Commit them with the source change in the same PR.
+This rewrites `config/crd/bases/*.yaml`, `charts/kagents/crds/*.yaml`, and `api/v1alpha1/zz_generated.deepcopy.go`. Commit them with the source change in the same PR.
 
 ### 4. Implement the reconciler change
 
@@ -244,7 +244,7 @@ A good rule: if your feature has a state machine, your test count should be ≥ 
 
 ### 7. Update the chart if there's a new default
 
-Cluster-wide defaults belong on the operator's CLI flags (read from a ConfigMap mounted via `envFrom`). Add a default to `charts/claude-teams-operator/values.yaml`, surface it in `templates/configmap.yaml`, and document it in [`docs/helm-values.md`](docs/helm-values.md).
+Cluster-wide defaults belong on the operator's CLI flags (read from a ConfigMap mounted via `envFrom`). Add a default to `charts/kagents/values.yaml`, surface it in `templates/configmap.yaml`, and document it in [`docs/helm-values.md`](docs/helm-values.md).
 
 ### 8. Document the field
 

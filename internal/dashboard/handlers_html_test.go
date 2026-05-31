@@ -66,7 +66,7 @@ func TestRouteRoot_RendersListPage(t *testing.T) {
 
 	body := rec.Body.String()
 	// Layout chrome
-	assert.Contains(t, body, "claude-teams-operator")
+	assert.Contains(t, body, "kagents")
 	assert.Contains(t, body, "Agent Teams")
 	// SSE wiring on the tbody (replaced 5s polling in #139)
 	assert.Contains(t, body, `hx-ext="sse"`)
