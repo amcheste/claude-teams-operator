@@ -7,7 +7,7 @@ import (
 	"io"
 	"strconv"
 
-	claudev1alpha1 "github.com/amcheste/claude-teams-operator/api/v1alpha1"
+	claudev1alpha1 "github.com/amcheste/kagents/api/v1alpha1"
 )
 
 //go:embed templates/*.html

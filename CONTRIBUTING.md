@@ -1,13 +1,13 @@
 # Contributing
 
-Thank you for considering a contribution to **kagents** (the [`claude-teams-operator`](https://github.com/amcheste/claude-teams-operator) repo). This guide covers everything from setting up your dev environment to opening your first PR.
+Thank you for considering a contribution to **kagents** (the [`claude-teams-operator`](https://github.com/amcheste/kagents) repo). This guide covers everything from setting up your dev environment to opening your first PR.
 
 If you're new here, the fastest orientation:
 
 1. Read the [Getting Started tutorial](https://kagents.dev/tutorials/getting-started/) to install kagents on a Kind cluster and run a team end-to-end (~15 minutes)
 2. Read the [Resource model](https://kagents.dev/explanation/resources/) and [Coordination protocol](https://kagents.dev/explanation/coordination/) explanation pages to understand the architecture
 3. Skim this guide
-4. Check the [good first issues](https://github.com/amcheste/claude-teams-operator/labels/good%20first%20issue) below for something to pick up
+4. Check the [good first issues](https://github.com/amcheste/kagents/labels/good%20first%20issue) below for something to pick up
 
 ## Code of Conduct
 
@@ -19,7 +19,7 @@ This project uses **Linear** (team `AMC`, project `claude-teams-operator`) as th
 
 For external contributors who don't have Linear access:
 
-- File issues directly on GitHub using the [issue templates](https://github.com/amcheste/claude-teams-operator/issues/new/choose). The maintainer will mirror them into Linear.
+- File issues directly on GitHub using the [issue templates](https://github.com/amcheste/kagents/issues/new/choose). The maintainer will mirror them into Linear.
 - Reference the GitHub issue number in your PR (`Fixes #123`). That works fine. The Linear sync handles the cross-reference.
 
 For maintainers and regular contributors:
@@ -31,11 +31,11 @@ For maintainers and regular contributors:
 
 If you're looking for a way in, browse:
 
-- [`good first issue`](https://github.com/amcheste/claude-teams-operator/labels/good%20first%20issue). Small, well-scoped tasks with clear acceptance criteria
-- [`help wanted`](https://github.com/amcheste/claude-teams-operator/labels/help%20wanted). Areas where the maintainer would specifically welcome a hand
-- [`documentation`](https://github.com/amcheste/claude-teams-operator/labels/documentation). Content fixes, new tutorials, or how-to guides for the docs site at [kagents.dev](https://kagents.dev)
+- [`good first issue`](https://github.com/amcheste/kagents/labels/good%20first%20issue). Small, well-scoped tasks with clear acceptance criteria
+- [`help wanted`](https://github.com/amcheste/kagents/labels/help%20wanted). Areas where the maintainer would specifically welcome a hand
+- [`documentation`](https://github.com/amcheste/kagents/labels/documentation). Content fixes, new tutorials, or how-to guides for the docs site at [kagents.dev](https://kagents.dev)
 
-If nothing on those lists fits, [open a Discussion](https://github.com/amcheste/claude-teams-operator/discussions) describing what you'd like to work on. Better to align before writing code than after.
+If nothing on those lists fits, [open a Discussion](https://github.com/amcheste/kagents/discussions) describing what you'd like to work on. Better to align before writing code than after.
 
 ## Prerequisites
 
@@ -56,8 +56,8 @@ go version   # go1.23.x or later required
 
 ```bash
 # Clone the repo
-git clone git@github.com:amcheste/claude-teams-operator.git
-cd claude-teams-operator
+git clone git@github.com:amcheste/kagents.git
+cd kagents
 
 # Download dependencies
 go mod tidy
@@ -257,7 +257,7 @@ Cluster-wide defaults belong on the operator's CLI flags (read from a ConfigMap 
 
 These are good examples to skim before opening your first reconciler PR. Each one followed this exact recipe:
 
-- [#13 Crash respawn](https://github.com/amcheste/claude-teams-operator/pull/133). Controller state machine + metrics + webhook + tests across all three layers
-- [#14 Per-agent RBAC](https://github.com/amcheste/claude-teams-operator/pull/134). CRD-less feature: just controller logic + scoped Roles + RBAC markers
-- [#15 create-pr](https://github.com/amcheste/claude-teams-operator/pull/135). New internal package (`internal/github`) + controller wiring + httptest-backed tests
-- [#16 push-branch](https://github.com/amcheste/claude-teams-operator/pull/148). Async terminal Job + status mirror + envtest integration spec
+- [#13 Crash respawn](https://github.com/amcheste/kagents/pull/133). Controller state machine + metrics + webhook + tests across all three layers
+- [#14 Per-agent RBAC](https://github.com/amcheste/kagents/pull/134). CRD-less feature: just controller logic + scoped Roles + RBAC markers
+- [#15 create-pr](https://github.com/amcheste/kagents/pull/135). New internal package (`internal/github`) + controller wiring + httptest-backed tests
+- [#16 push-branch](https://github.com/amcheste/kagents/pull/148). Async terminal Job + status mirror + envtest integration spec

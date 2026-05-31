@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	claudev1alpha1 "github.com/amcheste/claude-teams-operator/api/v1alpha1"
+	claudev1alpha1 "github.com/amcheste/kagents/api/v1alpha1"
 )
 
 func richTeam(name, namespace string) *claudev1alpha1.AgentTeam {
@@ -254,7 +254,7 @@ func TestBudgetPercent_NoBudgetReturnsZero(t *testing.T) {
 func TestBudgetPercent_NormalRange(t *testing.T) {
 	limit := "10.00"
 	team := claudev1alpha1.AgentTeam{
-		Spec: claudev1alpha1.AgentTeamSpec{Lifecycle: &claudev1alpha1.LifecycleSpec{BudgetLimit: &limit}},
+		Spec:   claudev1alpha1.AgentTeamSpec{Lifecycle: &claudev1alpha1.LifecycleSpec{BudgetLimit: &limit}},
 		Status: claudev1alpha1.AgentTeamStatus{EstimatedCost: "5.00"},
 	}
 	got := templateFuncs["budgetPercent"].(func(claudev1alpha1.AgentTeam) int)(team)

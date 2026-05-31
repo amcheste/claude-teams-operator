@@ -10,9 +10,9 @@ keywords:
   - agent
   - kubernetes
   - operator
-home: https://github.com/amcheste/claude-teams-operator
+home: https://github.com/amcheste/kagents
 sources:
-  - https://github.com/amcheste/claude-teams-operator
+  - https://github.com/amcheste/kagents
 maintainers:
   - name: Alan Chester
     url: https://github.com/amcheste

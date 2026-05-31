@@ -84,7 +84,7 @@ kubectl rollout status deployment/kagents-controller-manager \
 ## 5. Verify with the mailbox smoke test
 
 ```bash
-git clone https://github.com/amcheste/claude-teams-operator.git
+git clone https://github.com/amcheste/kagents.git
 cd claude-teams-operator
 make mailbox-smoke-test
 ```

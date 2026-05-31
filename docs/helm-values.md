@@ -29,7 +29,7 @@ To override values, use `--set key=value` or `--values overrides.yaml`. To inspe
 
 | Key | Default | Description |
 |---|---|---|
-| `image.repository` | `ghcr.io/amcheste/claude-teams-operator` | Operator container image. Pinned to the release tag at chart publish time. |
+| `image.repository` | `ghcr.io/amcheste/kagents` | Operator container image. Pinned to the release tag at chart publish time. |
 | `image.tag` | `latest` | Operator image tag. Released charts pin this to the matching release version. |
 | `image.pullPolicy` | `IfNotPresent` | One of `Always`, `IfNotPresent`, `Never`. |
 
@@ -214,4 +214,4 @@ kubectl rollout restart deployment/<release>-controller-manager -n claude-teams-
 
 ## Regenerating this document
 
-This doc is hand-written to keep the rendered output controllable. When `values.yaml` changes, update this file in the same PR. Future automation (`helm-docs`) is tracked in [#89](https://github.com/amcheste/claude-teams-operator/issues/89).
+This doc is hand-written to keep the rendered output controllable. When `values.yaml` changes, update this file in the same PR. Future automation (`helm-docs`) is tracked in [#89](https://github.com/amcheste/kagents/issues/89).

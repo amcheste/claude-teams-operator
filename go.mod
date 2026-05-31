@@ -1,4 +1,4 @@
-module github.com/amcheste/claude-teams-operator
+module github.com/amcheste/kagents
 
 go 1.26.0
 

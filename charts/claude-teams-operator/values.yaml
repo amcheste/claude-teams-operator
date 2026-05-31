@@ -3,7 +3,7 @@
 replicaCount: 1
 
 image:
-  repository: ghcr.io/amcheste/claude-teams-operator
+  repository: ghcr.io/amcheste/kagents
   tag: latest
   pullPolicy: IfNotPresent
 

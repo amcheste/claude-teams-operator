@@ -36,10 +36,10 @@ jobs:
 
       # ── Build & load operator image ────────────────────────────────────────
       - name: Build operator image
-        run: docker build -t ghcr.io/amcheste/claude-teams-operator:acceptance -f docker/Dockerfile.operator .
+        run: docker build -t ghcr.io/amcheste/kagents:acceptance -f docker/Dockerfile.operator .
 
       - name: Load operator image into Kind
-        run: kind load docker-image ghcr.io/amcheste/claude-teams-operator:acceptance --name claude-teams
+        run: kind load docker-image ghcr.io/amcheste/kagents:acceptance --name claude-teams
 
       # Pull busybox so it's available in Kind nodes before tests start
       - name: Pre-pull busybox into Kind
@@ -82,7 +82,7 @@ jobs:
       - name: Set acceptance image and flags
         run: |
           kubectl set image deployment/controller-manager \
-            manager=ghcr.io/amcheste/claude-teams-operator:acceptance \
+            manager=ghcr.io/amcheste/kagents:acceptance \
             -n claude-teams-system
 
           kubectl patch deployment controller-manager \

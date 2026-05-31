@@ -21,7 +21,7 @@ You don't need any cloud accounts or external services. Everything runs on your 
 You'll also need the kagents repo cloned locally so you can use the included `make kind-create` setup script (which provisions a Kind cluster with the NFS-style RWX storage the operator needs):
 
 ```bash
-git clone https://github.com/amcheste/claude-teams-operator.git
+git clone https://github.com/amcheste/kagents.git
 cd claude-teams-operator
 ```
 

@@ -108,7 +108,7 @@ kubectl rollout status deployment/kagents-controller-manager \
 The repo includes a smoke test that provisions an `AgentTeam`, lets the lead and a teammate exchange a single mailbox round-trip, and reports the effective StorageClass and AccessMode.
 
 ```bash
-git clone https://github.com/amcheste/claude-teams-operator.git
+git clone https://github.com/amcheste/kagents.git
 cd claude-teams-operator
 make mailbox-smoke-test
 ```
