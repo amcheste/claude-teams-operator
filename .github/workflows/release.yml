@@ -59,7 +59,7 @@ jobs:
         id: meta-operator
         uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6
         with:
-          images: ghcr.io/amcheste/claude-teams-operator
+          images: ghcr.io/amcheste/kagents
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -111,7 +111,7 @@ jobs:
       - name: Sign operator image with Sigstore keyless
         run: |
           cosign sign --yes \
-            ghcr.io/amcheste/claude-teams-operator@${{ steps.build-operator.outputs.digest }}
+            ghcr.io/amcheste/kagents@${{ steps.build-operator.outputs.digest }}
 
       - name: Sign runner image with Sigstore keyless
         run: |
@@ -206,25 +206,25 @@ jobs:
               --version ${{ steps.prerelease.outputs.version_num }}
 
             # Raw manifests
-            kubectl apply -f https://github.com/amcheste/claude-teams-operator/releases/download/${{ github.ref_name }}/install.yaml
+            kubectl apply -f https://github.com/amcheste/kagents/releases/download/${{ github.ref_name }}/install.yaml
             ```
 
             ## Container Images
 
             ```
-            ghcr.io/amcheste/claude-teams-operator:${{ github.ref_name }}
+            ghcr.io/amcheste/kagents:${{ github.ref_name }}
             ghcr.io/amcheste/claude-code-runner:${{ github.ref_name }}
             ```
 
             Images are signed with [Sigstore Cosign](https://docs.sigstore.dev/) (keyless). Verify with:
             ```bash
-            cosign verify ghcr.io/amcheste/claude-teams-operator:${{ github.ref_name }} \
-              --certificate-identity-regexp="https://github.com/amcheste/claude-teams-operator" \
+            cosign verify ghcr.io/amcheste/kagents:${{ github.ref_name }} \
+              --certificate-identity-regexp="https://github.com/amcheste/kagents" \
               --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
 
             cosign verify ghcr.io/amcheste/claude-code-runner:${{ github.ref_name }} \
-              --certificate-identity-regexp="https://github.com/amcheste/claude-teams-operator" \
+              --certificate-identity-regexp="https://github.com/amcheste/kagents" \
               --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
             ```
 
-            See [CHANGELOG](https://github.com/amcheste/claude-teams-operator/blob/main/CHANGELOG.md) for full details.
+            See [CHANGELOG](https://github.com/amcheste/kagents/blob/main/CHANGELOG.md) for full details.

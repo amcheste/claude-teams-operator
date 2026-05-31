@@ -1,6 +1,6 @@
 # claude-teams-operator Makefile
 
-IMG ?= ghcr.io/amcheste/claude-teams-operator:latest
+IMG ?= ghcr.io/amcheste/kagents:latest
 CLAUDE_CODE_IMG ?= ghcr.io/amcheste/claude-code-runner:latest
 DASHBOARD_IMG ?= ghcr.io/amcheste/claude-teams-dashboard:latest
 KIND_CLUSTER_NAME ?= claude-teams

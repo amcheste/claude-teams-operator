@@ -8,7 +8,7 @@ Claude Code does not expose real-time token usage to the outside world. The oper
 
 ### How the estimate works
 
-The estimator (in [`internal/budget`](https://github.com/amcheste/claude-teams-operator/tree/main/internal/budget)) treats every active agent session as if it consumes a fixed token rate per minute. The rate per million tokens uses Anthropic's published list price, applied to a **heuristic of 50,000 input + 5,000 output tokens per active minute** per agent.
+The estimator (in [`internal/budget`](https://github.com/amcheste/kagents/tree/main/internal/budget)) treats every active agent session as if it consumes a fixed token rate per minute. The rate per million tokens uses Anthropic's published list price, applied to a **heuristic of 50,000 input + 5,000 output tokens per active minute** per agent.
 
 | Model | Input ($/M tokens) | Output ($/M tokens) | Approx. cost / minute / agent |
 |-------|-------------------:|--------------------:|------------------------------:|

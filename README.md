@@ -6,8 +6,8 @@
 
 **Run Claude Code Agent Teams as a Kubernetes operator.**
 
-[![Validate](https://github.com/amcheste/claude-teams-operator/actions/workflows/validate.yml/badge.svg)](https://github.com/amcheste/claude-teams-operator/actions/workflows/validate.yml)
-[![Version](https://img.shields.io/github/v/tag/amcheste/claude-teams-operator?label=version&sort=semver&color=0B0B0C)](https://github.com/amcheste/claude-teams-operator/releases)
+[![Validate](https://github.com/amcheste/kagents/actions/workflows/validate.yml/badge.svg)](https://github.com/amcheste/kagents/actions/workflows/validate.yml)
+[![Version](https://img.shields.io/github/v/tag/amcheste/kagents?label=version&sort=semver&color=0B0B0C)](https://github.com/amcheste/kagents/releases)
 [![License](https://img.shields.io/badge/License-Apache_2.0-1F4D3A.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.23-00ADD8)](go.mod)
 
@@ -15,7 +15,7 @@
 
 ---
 
-> **kagents** is the project brand. The implementation lives in the [`claude-teams-operator`](https://github.com/amcheste/claude-teams-operator) repository and ships under the `claude.amcheste.io/v1alpha1` API group. Documentation site: [kagents.dev](https://kagents.dev) (under construction. See [v0.7.0 milestone](https://github.com/amcheste/claude-teams-operator/milestone/8)).
+> **kagents** is the project brand. The implementation lives in the [`claude-teams-operator`](https://github.com/amcheste/kagents) repository and ships under the `claude.amcheste.io/v1alpha1` API group. Documentation site: [kagents.dev](https://kagents.dev) (under construction. See [v0.7.0 milestone](https://github.com/amcheste/kagents/milestone/8)).
 
 Claude Code [Agent Teams](https://docs.anthropic.com/en/docs/claude-code/agent-teams) let multiple Claude Code instances collaborate. A lead coordinates work via a shared task list while teammates communicate through peer-to-peer mailboxes. Natively this runs on a single machine using tmux. This operator lifts that pattern into Kubernetes so you can run large-scale agent teams on your cluster.
 
@@ -68,7 +68,7 @@ kubectl create secret generic anthropic-api-key \
 
 # 3. Apply a sample team
 kubectl apply -n dev-agents -f \
-  https://raw.githubusercontent.com/amcheste/claude-teams-operator/main/config/samples/auth-refactor-team.yaml
+  https://raw.githubusercontent.com/amcheste/kagents/main/config/samples/auth-refactor-team.yaml
 
 # 4. Watch the team progress
 kubectl get agentteams -n dev-agents -w

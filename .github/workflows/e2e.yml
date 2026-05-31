@@ -47,7 +47,7 @@ jobs:
             # so the maintainer sees it and configures the secret.
             echo "::error::ANTHROPIC_API_KEY secret is not configured on this repo."
             echo "::error::A release cannot ship without real-API E2E validation."
-            echo "::error::Configure the secret with: gh secret set ANTHROPIC_API_KEY --repo amcheste/claude-teams-operator"
+            echo "::error::Configure the secret with: gh secret set ANTHROPIC_API_KEY --repo amcheste/kagents"
             exit 1
           else
             echo "has_key=false" >> "$GITHUB_OUTPUT"

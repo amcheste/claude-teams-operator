@@ -9,7 +9,7 @@ hide:
 **Run Claude Code Agent Teams as a Kubernetes operator.**
 
 [Get started in 5 minutes :material-rocket-launch:](tutorials/getting-started.md){ .md-button .md-button--primary }
-[View on GitHub :material-github:](https://github.com/amcheste/claude-teams-operator){ .md-button }
+[View on GitHub :material-github:](https://github.com/amcheste/kagents){ .md-button }
 
 ---
 
@@ -81,7 +81,7 @@ helm install kagents \
 
     Apache 2.0. Issues, PRs, and Discussions welcome.
 
-    [github.com/amcheste/claude-teams-operator](https://github.com/amcheste/claude-teams-operator)
+    [github.com/amcheste/kagents](https://github.com/amcheste/kagents)
 
 -   :material-presentation:{ .lg .middle } **Talk**
 
