@@ -5,7 +5,7 @@ metadata:
   name: {{ .Release.Name }}-metrics
   namespace: {{ default .Release.Namespace .Values.metrics.serviceMonitor.namespace }}
   labels:
-    app.kubernetes.io/name: claude-teams-operator
+    app.kubernetes.io/name: kagents
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/component: metrics
     {{- with .Values.metrics.serviceMonitor.additionalLabels }}
@@ -17,7 +17,7 @@ spec:
       - {{ .Release.Namespace }}
   selector:
     matchLabels:
-      app.kubernetes.io/name: claude-teams-operator
+      app.kubernetes.io/name: kagents
       app.kubernetes.io/instance: {{ .Release.Name }}
       app.kubernetes.io/component: metrics
   endpoints:

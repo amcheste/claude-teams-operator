@@ -92,7 +92,7 @@ The `efs-ap` provisioning mode creates an EFS Access Point per PVC, which gives 
 
 ```bash
 helm install kagents \
-  oci://ghcr.io/amcheste/charts/claude-teams-operator \
+  oci://ghcr.io/amcheste/charts/kagents \
   --namespace claude-teams-system --create-namespace
 ```
 
@@ -109,7 +109,7 @@ The repo includes a smoke test that provisions an `AgentTeam`, lets the lead and
 
 ```bash
 git clone https://github.com/amcheste/kagents.git
-cd claude-teams-operator
+cd kagents
 make mailbox-smoke-test
 ```
 

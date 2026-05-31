@@ -104,7 +104,7 @@ The operator binary exposes `/metrics` on port 8080 by default. Eight series, al
 Wire them to Prometheus by enabling the chart's ServiceMonitor:
 
 ```bash
-helm upgrade kagents ./charts/claude-teams-operator \
+helm upgrade kagents ./charts/kagents \
   --set metrics.serviceMonitor.enabled=true
 ```
 
@@ -113,7 +113,7 @@ helm upgrade kagents ./charts/claude-teams-operator \
 The chart ships a curated Grafana dashboard as a ConfigMap with the `grafana_dashboard: "1"` label. With the standard `kube-prometheus-stack`, the Grafana sidecar auto-imports it within ~30 seconds.
 
 ```bash
-helm upgrade kagents ./charts/claude-teams-operator \
+helm upgrade kagents ./charts/kagents \
   --set metrics.serviceMonitor.enabled=true \
   --set metrics.grafanaDashboard.enabled=true
 ```

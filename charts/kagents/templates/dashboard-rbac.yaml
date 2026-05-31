@@ -7,7 +7,7 @@ kind: ClusterRole
 metadata:
   name: {{ .Release.Name }}-dashboard-reader
   labels:
-    app.kubernetes.io/name: claude-teams-operator
+    app.kubernetes.io/name: kagents
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/component: dashboard
 rules:
@@ -30,7 +30,7 @@ metadata:
   name: {{ .Release.Name }}-dashboard-reader
   namespace: {{ .Values.dashboard.namespace }}
   labels:
-    app.kubernetes.io/name: claude-teams-operator
+    app.kubernetes.io/name: kagents
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/component: dashboard
 roleRef:
@@ -48,7 +48,7 @@ kind: ClusterRoleBinding
 metadata:
   name: {{ .Release.Name }}-dashboard-reader
   labels:
-    app.kubernetes.io/name: claude-teams-operator
+    app.kubernetes.io/name: kagents
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/component: dashboard
 roleRef:

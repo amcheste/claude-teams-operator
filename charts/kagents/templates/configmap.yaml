@@ -4,7 +4,7 @@ metadata:
   name: {{ .Release.Name }}-config
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: claude-teams-operator
+    app.kubernetes.io/name: kagents
     app.kubernetes.io/instance: {{ .Release.Name }}
 data:
   # Defaults consumed by the operator at AgentTeam reconcile time. Operators

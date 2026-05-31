@@ -28,7 +28,7 @@ For teams that don't set their own `budgetLimit`, the operator falls back to a c
 
 ```bash
 helm upgrade kagents \
-  oci://ghcr.io/amcheste/charts/claude-teams-operator \
+  oci://ghcr.io/amcheste/charts/kagents \
   --namespace claude-teams-system --reuse-values \
   --set defaultBudgetLimit=15.00
 ```
@@ -45,7 +45,7 @@ Set the chart-level webhook URL (applies to all teams unless overridden per-team
 
 ```bash
 helm upgrade kagents \
-  oci://ghcr.io/amcheste/charts/claude-teams-operator \
+  oci://ghcr.io/amcheste/charts/kagents \
   --namespace claude-teams-system --reuse-values \
   --set webhook.defaultUrl=https://hooks.example.com/kagents
 ```

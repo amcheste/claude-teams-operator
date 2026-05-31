@@ -22,7 +22,7 @@ You'll also need the kagents repo cloned locally so you can use the included `ma
 
 ```bash
 git clone https://github.com/amcheste/kagents.git
-cd claude-teams-operator
+cd kagents
 ```
 
 ## 1. Stand up a local cluster
@@ -46,7 +46,7 @@ kubectl cluster-info --context kind-claude-teams
 
 ```bash
 helm install kagents \
-  oci://ghcr.io/amcheste/charts/claude-teams-operator \
+  oci://ghcr.io/amcheste/charts/kagents \
   --namespace claude-teams-system --create-namespace
 ```
 

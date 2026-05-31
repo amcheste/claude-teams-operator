@@ -59,7 +59,7 @@ kubectl apply -f storageclass-filestore.yaml
 
 ```bash
 helm install kagents \
-  oci://ghcr.io/amcheste/charts/claude-teams-operator \
+  oci://ghcr.io/amcheste/charts/kagents \
   --namespace claude-teams-system --create-namespace
 ```
 
@@ -74,7 +74,7 @@ kubectl rollout status deployment/kagents-controller-manager \
 
 ```bash
 git clone https://github.com/amcheste/kagents.git
-cd claude-teams-operator
+cd kagents
 make mailbox-smoke-test
 ```
 
