@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	claudev1alpha1 "github.com/amcheste/kagents/api/v1alpha1"
+	"github.com/amcheste/kagents/internal/harness"
 )
 
 // --- Test Helpers ---
@@ -1254,12 +1255,13 @@ func TestClearTeammatePendingApproval_ClearsExistingEntry(t *testing.T) {
 		"unrelated teammate must not be touched")
 }
 
-// TestAgentImage_DefaultWhenUnset verifies agentImage() returns the baked-in
-// default when the reconciler field is empty, and the override when set.
+// TestAgentImage_DefaultWhenUnset verifies agentImage() returns the harness
+// adapter's default image when the reconciler field is empty, and the
+// override when set.
 func TestAgentImage_DefaultWhenUnset(t *testing.T) {
 	r := &AgentTeamReconciler{}
-	assert.Equal(t, defaultAgentImage, r.agentImage(),
-		"agentImage must return defaultAgentImage when AgentImage is unset")
+	assert.Equal(t, harness.ClaudeCode{}.DefaultImage(), r.agentImage(),
+		"agentImage must return the claude-code adapter's default when AgentImage is unset")
 
 	r.AgentImage = "custom/image:v1"
 	assert.Equal(t, "custom/image:v1", r.agentImage(),

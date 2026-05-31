@@ -107,6 +107,18 @@ spec:
                     - beads
                     type: string
                 type: object
+              harness:
+                default: claude-code
+                description: |-
+                  Harness selects the agent runtime that powers this team's pods.
+                  Today the only supported value is "claude-code" (Anthropic's native
+                  Claude Code Agent Teams protocol), which is also the default when
+                  omitted. The field exists so the operator's API stays neutral to a
+                  single agent runtime; future harnesses for other team-based agent
+                  systems can plug in behind the same CRD without an API break.
+                enum:
+                - claude-code
+                type: string
               lead:
                 description: Lead configures the team lead agent.
                 properties:

@@ -116,6 +116,7 @@ _Appears in:_
 | `lifecycle` _[LifecycleSpec](#lifecyclespec)_ | Lifecycle configures team runtime behavior and budget. |  | Optional: \{\} <br /> |
 | `qualityGates` _[QualityGateSpec](#qualitygatespec)_ | QualityGates configures validation before marking team complete. |  | Optional: \{\} <br /> |
 | `observability` _[ObservabilitySpec](#observabilityspec)_ | Observability configures metrics and notifications. |  | Optional: \{\} <br /> |
+| `harness` _string_ | Harness selects the agent runtime that powers this team's pods.<br />Today the only supported value is "claude-code" (Anthropic's native<br />Claude Code Agent Teams protocol), which is also the default when<br />omitted. The field exists so the operator's API stays neutral to a<br />single agent runtime; future harnesses for other team-based agent<br />systems can plug in behind the same CRD without an API break. | claude-code | Enum: [claude-code] <br />Optional: \{\} <br /> |
 
 
 #### AgentTeamStatus

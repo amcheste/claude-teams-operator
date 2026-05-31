@@ -16,6 +16,7 @@ import (
 
 	claudev1alpha1 "github.com/amcheste/kagents/api/v1alpha1"
 	"github.com/amcheste/kagents/internal/controller"
+	"github.com/amcheste/kagents/internal/harness"
 	"github.com/amcheste/kagents/internal/metrics"
 )
 
@@ -74,6 +75,7 @@ func main() {
 		AgentImage:     agentImage,
 		InitImage:      initImage,
 		SkipInitScript: skipInitScript,
+		Harnesses:      harness.DefaultRegistry(),
 	}
 	if agentCommand != "" {
 		reconciler.AgentCommand = strings.Split(agentCommand, ",")

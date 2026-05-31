@@ -46,6 +46,17 @@ type AgentTeamSpec struct {
 	// Observability configures metrics and notifications.
 	// +optional
 	Observability *ObservabilitySpec `json:"observability,omitempty"`
+
+	// Harness selects the agent runtime that powers this team's pods.
+	// Today the only supported value is "claude-code" (Anthropic's native
+	// Claude Code Agent Teams protocol), which is also the default when
+	// omitted. The field exists so the operator's API stays neutral to a
+	// single agent runtime; future harnesses for other team-based agent
+	// systems can plug in behind the same CRD without an API break.
+	// +kubebuilder:validation:Enum=claude-code
+	// +kubebuilder:default="claude-code"
+	// +optional
+	Harness string `json:"harness,omitempty"`
 }
 
 // RepositorySpec defines the git repository configuration.
