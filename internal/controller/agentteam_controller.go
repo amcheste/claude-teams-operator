@@ -105,9 +105,9 @@ func (r *AgentTeamReconciler) initImage() string {
 	return defaultInitImage
 }
 
-// +kubebuilder:rbac:groups=claude.amcheste.io,resources=agentteams,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=claude.amcheste.io,resources=agentteams/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=claude.amcheste.io,resources=agentteams/finalizers,verbs=update
+// +kubebuilder:rbac:groups=kagents.dev,resources=agentteams,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=kagents.dev,resources=agentteams/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=kagents.dev,resources=agentteams/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
@@ -1121,8 +1121,8 @@ func (r *AgentTeamReconciler) buildAgentPod(
 		"app.kubernetes.io/name":      "claude-teams-operator",
 		"app.kubernetes.io/instance":  team.Name,
 		"app.kubernetes.io/component": agentName,
-		"claude.amcheste.io/team":     team.Name,
-		"claude.amcheste.io/role":     role,
+		"kagents.dev/team":            team.Name,
+		"kagents.dev/role":            role,
 	}
 
 	envVars := []corev1.EnvVar{
@@ -1704,7 +1704,7 @@ func (r *AgentTeamReconciler) checkApprovalGate(ctx context.Context, team *claud
 	}
 
 	// Check for the approval annotation.
-	annotationKey := "approved.claude.amcheste.io/" + event
+	annotationKey := "approved.kagents.dev/" + event
 	if team.Annotations[annotationKey] == "true" {
 		return true
 	}
@@ -1842,7 +1842,7 @@ func (r *AgentTeamReconciler) terminateAllPods(ctx context.Context, team *claude
 	podList := &corev1.PodList{}
 	if err := r.List(ctx, podList,
 		client.InNamespace(team.Namespace),
-		client.MatchingLabels{"claude.amcheste.io/team": team.Name},
+		client.MatchingLabels{"kagents.dev/team": team.Name},
 	); err != nil {
 		return err
 	}

@@ -1,10 +1,10 @@
 # API Reference
 
 ## Packages
-- [claude.amcheste.io/v1alpha1](#claudeamchesteiov1alpha1)
+- [kagents.dev/v1alpha1](#kagentsdevv1alpha1)
 
 
-## claude.amcheste.io/v1alpha1
+## kagents.dev/v1alpha1
 
 Package v1alpha1 contains API Schema definitions for the claude v1alpha1 API group.
 
@@ -47,7 +47,7 @@ AgentTeam is the Schema for the agentteams API.
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `apiVersion` _string_ | `claude.amcheste.io/v1alpha1` | | |
+| `apiVersion` _string_ | `kagents.dev/v1alpha1` | | |
 | `kind` _string_ | `AgentTeam` | | |
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
 | `spec` _[AgentTeamSpec](#agentteamspec)_ |  |  |  |
@@ -66,7 +66,7 @@ AgentTeamRun is an instance of an AgentTeamTemplate applied to a specific reposi
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `apiVersion` _string_ | `claude.amcheste.io/v1alpha1` | | |
+| `apiVersion` _string_ | `kagents.dev/v1alpha1` | | |
 | `kind` _string_ | `AgentTeamRun` | | |
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
 | `spec` _[AgentTeamRunSpec](#agentteamrunspec)_ |  |  |  |
@@ -158,7 +158,7 @@ AgentTeamTemplate is a reusable team definition.
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `apiVersion` _string_ | `claude.amcheste.io/v1alpha1` | | |
+| `apiVersion` _string_ | `kagents.dev/v1alpha1` | | |
 | `kind` _string_ | `AgentTeamTemplate` | | |
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
 | `spec` _[AgentTeamTemplateSpec](#agentteamtemplatespec)_ |  |  |  |
@@ -210,7 +210,7 @@ _Appears in:_
 
 
 ApprovalGateSpec pauses execution before a named event until human approval is recorded.
-Approval is granted by adding the annotation approved.claude.amcheste.io/{event}=true to the AgentTeam.
+Approval is granted by adding the annotation approved.kagents.dev/{event}=true to the AgentTeam.
 
 
 
@@ -320,7 +320,7 @@ _Appears in:_
 | `budgetLimit` _string_ | BudgetLimit is the maximum API spend in USD before the team is terminated (e.g. "10.00"). |  | Optional: \{\} <br /> |
 | `onComplete` _string_ | OnComplete determines what happens when the team finishes. | notify | Enum: [create-pr push-branch notify none] <br /> |
 | `pullRequest` _[PullRequestSpec](#pullrequestspec)_ | PullRequest configures PR creation when onComplete is "create-pr". |  | Optional: \{\} <br /> |
-| `approvalGates` _[ApprovalGateSpec](#approvalgatespec) array_ | ApprovalGates pause execution before specified events until human approval is recorded.<br />Grant approval by annotating the AgentTeam: kubectl annotate agentteam <name> approved.claude.amcheste.io/<event>=true |  | Optional: \{\} <br /> |
+| `approvalGates` _[ApprovalGateSpec](#approvalgatespec) array_ | ApprovalGates pause execution before specified events until human approval is recorded.<br />Grant approval by annotating the AgentTeam: kubectl annotate agentteam <name> approved.kagents.dev/<event>=true |  | Optional: \{\} <br /> |
 | `maxRestarts` _integer_ | MaxRestarts bounds how many times each teammate pod may be re-spawned<br />after a Failed phase before the team itself is marked Failed. The lead<br />pod is not subject to this limit; a lead crash always fails the team. | 3 | Minimum: 0 <br />Optional: \{\} <br /> |
 | `githubTokenSecret` _string_ | GitHubTokenSecret names a Secret in the team's namespace carrying a<br />GitHub token under the key GITHUB_TOKEN. Used by OnComplete=create-pr<br />(and OnComplete=push-branch, once implemented) to authenticate against<br />the GitHub REST API. |  | Optional: \{\} <br /> |
 | `prTitleTemplate` _string_ | PRTitleTemplate overrides the title template used by OnComplete=create-pr.<br />Available variables: .TeamName, .Namespace. When empty, falls back to<br />Spec.Lifecycle.PullRequest.TitleTemplate, then to the default<br />"claude-teams: \{\{.TeamName\}\}". |  | Optional: \{\} <br /> |

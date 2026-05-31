@@ -150,13 +150,13 @@ When the reconciler would otherwise spawn the gated teammate, it instead:
 
 1. Marks the teammate's `status.pendingApproval` field
 2. Fires a `completed` webhook event with the gate name
-3. Waits for the annotation `approved.claude.amcheste.io/spawn-email-drafter=true`
+3. Waits for the annotation `approved.kagents.dev/spawn-email-drafter=true`
 
 Grant approval:
 
 ```bash
 kubectl annotate agentteam my-team \
-  approved.claude.amcheste.io/spawn-email-drafter=true
+  approved.kagents.dev/spawn-email-drafter=true
 ```
 
 Within 30 seconds (the default reconcile interval), the gated teammate spawns and joins the team.

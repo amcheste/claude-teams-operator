@@ -155,7 +155,7 @@ func TestReconcileRunning_FiresTeammateErrorOnRespawn(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "wh-respawn-lead",
 			Namespace: "default",
-			Labels:    map[string]string{"claude.amcheste.io/team": "wh-respawn"},
+			Labels:    map[string]string{"kagents.dev/team": "wh-respawn"},
 		},
 		Status: corev1.PodStatus{Phase: corev1.PodRunning},
 	}
@@ -163,7 +163,7 @@ func TestReconcileRunning_FiresTeammateErrorOnRespawn(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "wh-respawn-worker",
 			Namespace: "default",
-			Labels:    map[string]string{"claude.amcheste.io/team": "wh-respawn"},
+			Labels:    map[string]string{"kagents.dev/team": "wh-respawn"},
 		},
 		Status: corev1.PodStatus{
 			Phase:   corev1.PodFailed,
@@ -207,7 +207,7 @@ func TestReconcileRunning_FiresTeammateErrorOnRestartLimitExceeded(t *testing.T)
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "wh-exceed-lead",
 			Namespace: "default",
-			Labels:    map[string]string{"claude.amcheste.io/team": "wh-exceed"},
+			Labels:    map[string]string{"kagents.dev/team": "wh-exceed"},
 		},
 		Status: corev1.PodStatus{Phase: corev1.PodSucceeded},
 	}
@@ -215,7 +215,7 @@ func TestReconcileRunning_FiresTeammateErrorOnRestartLimitExceeded(t *testing.T)
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "wh-exceed-worker",
 			Namespace: "default",
-			Labels:    map[string]string{"claude.amcheste.io/team": "wh-exceed"},
+			Labels:    map[string]string{"kagents.dev/team": "wh-exceed"},
 		},
 		Status: corev1.PodStatus{
 			Phase:   corev1.PodFailed,

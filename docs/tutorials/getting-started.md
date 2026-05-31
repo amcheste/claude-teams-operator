@@ -80,7 +80,7 @@ Replace `sk-ant-...` with your actual key from [console.anthropic.com](https://c
 This is a small Cowork-mode team. No git repo, just an output volume. The lead coordinates a single writer agent that produces a Markdown file.
 
 ```yaml title="hello-team.yaml"
-apiVersion: claude.amcheste.io/v1alpha1
+apiVersion: kagents.dev/v1alpha1
 kind: AgentTeam
 metadata:
   name: hello-team

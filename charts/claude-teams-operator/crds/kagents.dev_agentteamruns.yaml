@@ -4,28 +4,22 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.0
-  name: agentteams.claude.amcheste.io
+  name: agentteamruns.kagents.dev
 spec:
-  group: claude.amcheste.io
+  group: kagents.dev
   names:
-    kind: AgentTeam
-    listKind: AgentTeamList
-    plural: agentteams
-    singular: agentteam
+    kind: AgentTeamRun
+    listKind: AgentTeamRunList
+    plural: agentteamruns
+    singular: agentteamrun
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .spec.templateRef.name
+      name: Template
+      type: string
     - jsonPath: .status.phase
       name: Phase
-      type: string
-    - jsonPath: .status.ready
-      name: Ready
-      type: string
-    - jsonPath: .status.tasks.completed
-      name: Tasks Done
-      type: integer
-    - jsonPath: .status.estimatedCost
-      name: Cost
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
@@ -33,7 +27,8 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: AgentTeam is the Schema for the agentteams API.
+        description: AgentTeamRun is an instance of an AgentTeamTemplate applied to
+          a specific repository.
         properties:
           apiVersion:
             description: |-
@@ -53,11 +48,11 @@ spec:
           metadata:
             type: object
           spec:
-            description: AgentTeamSpec defines the desired state of an AgentTeam.
+            description: AgentTeamRunSpec defines an instance of a template applied
+              to a specific repo.
             properties:
               auth:
-                description: Auth configures how agents authenticate with the Anthropic
-                  API.
+                description: Auth configures API authentication for this run.
                 properties:
                   apiKeySecret:
                     description: APIKeySecret references a Secret containing ANTHROPIC_API_KEY.
@@ -67,48 +62,8 @@ spec:
                       tokens for subscription auth.
                     type: string
                 type: object
-              coordination:
-                description: Coordination configures how agents communicate.
-                properties:
-                  beads:
-                    description: Beads configures optional Beads integration for persistent
-                      tracking.
-                    properties:
-                      doltServerPort:
-                        default: 3306
-                        description: DoltServerPort is the port for the Dolt SQL server.
-                        format: int32
-                        type: integer
-                      doltServerService:
-                        description: DoltServerService is the K8s service name for
-                          the Dolt SQL server.
-                        type: string
-                      enabled:
-                        description: Enabled turns on Beads tracking.
-                        type: boolean
-                    required:
-                    - enabled
-                    type: object
-                  mailboxBackend:
-                    default: shared-volume
-                    description: MailboxBackend determines how mailbox messages are
-                      transported.
-                    enum:
-                    - shared-volume
-                    - redis
-                    - nats
-                    type: string
-                  taskBackend:
-                    default: shared-volume
-                    description: TaskBackend determines how the shared task list is
-                      stored.
-                    enum:
-                    - shared-volume
-                    - beads
-                    type: string
-                type: object
               lead:
-                description: Lead configures the team lead agent.
+                description: Lead configures the team lead for this run.
                 properties:
                   mcpServers:
                     description: MCPServers configures Model Context Protocol connections
@@ -245,16 +200,16 @@ spec:
                 - prompt
                 type: object
               lifecycle:
-                description: Lifecycle configures team runtime behavior and budget.
+                description: Lifecycle overrides for this run.
                 properties:
                   approvalGates:
                     description: |-
                       ApprovalGates pause execution before specified events until human approval is recorded.
-                      Grant approval by annotating the AgentTeam: kubectl annotate agentteam <name> approved.claude.amcheste.io/<event>=true
+                      Grant approval by annotating the AgentTeam: kubectl annotate agentteam <name> approved.kagents.dev/<event>=true
                     items:
                       description: |-
                         ApprovalGateSpec pauses execution before a named event until human approval is recorded.
-                        Approval is granted by adding the annotation approved.claude.amcheste.io/{event}=true to the AgentTeam.
+                        Approval is granted by adding the annotation approved.kagents.dev/{event}=true to the AgentTeam.
                       properties:
                         channel:
                           default: none
@@ -358,69 +313,8 @@ spec:
                       (e.g. "4h", "30m").
                     type: string
                 type: object
-              observability:
-                description: Observability configures metrics and notifications.
-                properties:
-                  logLevel:
-                    default: info
-                    description: LogLevel controls operator log verbosity for this
-                      team.
-                    enum:
-                    - debug
-                    - info
-                    - warn
-                    - error
-                    type: string
-                  metrics:
-                    description: Metrics configures Prometheus metrics exposition.
-                    properties:
-                      enabled:
-                        description: Enabled turns on metrics exposition.
-                        type: boolean
-                      port:
-                        default: 9090
-                        description: Port for the metrics endpoint.
-                        format: int32
-                        type: integer
-                    required:
-                    - enabled
-                    type: object
-                  webhook:
-                    description: Webhook configures event notifications.
-                    properties:
-                      events:
-                        description: Events to send notifications for.
-                        items:
-                          type: string
-                        minItems: 1
-                        type: array
-                      url:
-                        description: URL to POST events to.
-                        type: string
-                    required:
-                    - events
-                    - url
-                    type: object
-                type: object
-              qualityGates:
-                description: QualityGates configures validation before marking team
-                  complete.
-                properties:
-                  requireLint:
-                    description: RequireLint ensures linting passes before completion.
-                    type: boolean
-                  requireTests:
-                    description: RequireTests ensures tests pass before completion.
-                    type: boolean
-                  validationScript:
-                    description: ValidationScript is a custom script to run before
-                      marking complete.
-                    type: string
-                type: object
               repository:
-                description: |-
-                  Repository configuration for the codebase agents will work on.
-                  Use this for coding tasks. Optional when Workspace is set.
+                description: Repository configuration for this run (coding mode).
                 properties:
                   branch:
                     default: main
@@ -445,170 +339,18 @@ spec:
                 required:
                 - url
                 type: object
-              teammates:
-                description: Teammates defines the worker agents in the team.
-                items:
-                  description: TeammateSpec defines a single teammate agent.
-                  properties:
-                    dependsOn:
-                      description: DependsOn lists teammate names that must complete
-                        before this one starts.
-                      items:
-                        type: string
-                      type: array
-                    mcpServers:
-                      description: MCPServers configures Model Context Protocol connections
-                        for this teammate.
-                      items:
-                        description: MCPServerSpec configures a Model Context Protocol
-                          server for an agent.
-                        properties:
-                          credentialsSecret:
-                            description: CredentialsSecret references a Secret containing
-                              an 'apiKey' key for bearer auth.
-                            type: string
-                          name:
-                            description: Name identifies this MCP server in the agent's
-                              config.
-                            type: string
-                          url:
-                            description: URL is the MCP server endpoint.
-                            type: string
-                        required:
-                        - name
-                        - url
-                        type: object
-                      type: array
-                    model:
-                      default: sonnet
-                      description: Model to use for this teammate.
-                      enum:
-                      - opus
-                      - sonnet
-                      - haiku
-                      type: string
-                    name:
-                      description: Name is the unique identifier for this teammate.
-                      pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$
-                      type: string
-                    prompt:
-                      description: Prompt is the spawn instruction for this teammate.
-                      type: string
-                    resources:
-                      description: Resources defines compute resources for this teammate's
-                        pod.
-                      properties:
-                        claims:
-                          description: |-
-                            Claims lists the names of resources, defined in spec.resourceClaims,
-                            that are used by this container.
-
-                            This field depends on the
-                            DynamicResourceAllocation feature gate.
-
-                            This field is immutable. It can only be set for containers.
-                          items:
-                            description: ResourceClaim references one entry in PodSpec.ResourceClaims.
-                            properties:
-                              name:
-                                description: |-
-                                  Name must match the name of one entry in pod.spec.resourceClaims of
-                                  the Pod where this field is used. It makes that resource available
-                                  inside a container.
-                                type: string
-                              request:
-                                description: |-
-                                  Request is the name chosen for a request in the referenced claim.
-                                  If empty, everything from the claim is made available, otherwise
-                                  only the result of this request.
-                                type: string
-                            required:
-                            - name
-                            type: object
-                          type: array
-                          x-kubernetes-list-map-keys:
-                          - name
-                          x-kubernetes-list-type: map
-                        limits:
-                          additionalProperties:
-                            anyOf:
-                            - type: integer
-                            - type: string
-                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                            x-kubernetes-int-or-string: true
-                          description: |-
-                            Limits describes the maximum amount of compute resources allowed.
-                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                          type: object
-                        requests:
-                          additionalProperties:
-                            anyOf:
-                            - type: integer
-                            - type: string
-                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                            x-kubernetes-int-or-string: true
-                          description: |-
-                            Requests describes the minimum amount of compute resources required.
-                            If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
-                            otherwise to an implementation-defined value. Requests cannot exceed Limits.
-                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                          type: object
-                      type: object
-                    scope:
-                      description: Scope restricts which files this teammate can access.
-                      properties:
-                        excludePaths:
-                          description: ExcludePaths lists paths the teammate should
-                            not modify.
-                          items:
-                            type: string
-                          type: array
-                        includePaths:
-                          description: IncludePaths lists paths the teammate should
-                            focus on.
-                          items:
-                            type: string
-                          type: array
-                      type: object
-                    skills:
-                      description: Skills to mount into .claude/skills/ for this teammate.
-                      items:
-                        description: SkillSpec defines a Claude Code skill to mount
-                          into an agent pod.
-                        properties:
-                          name:
-                            description: Name is the skill directory name under .claude/skills/.
-                            type: string
-                          source:
-                            description: Source identifies where to load the skill
-                              from.
-                            properties:
-                              configMap:
-                                description: |-
-                                  ConfigMap references a ConfigMap in the same namespace.
-                                  Each key in the ConfigMap becomes a file in the skill directory.
-                                type: string
-                              oci:
-                                description: OCI is an OCI artifact reference containing
-                                  the skill files (e.g. "ghcr.io/org/skills/web-research:v1").
-                                type: string
-                            type: object
-                        required:
-                        - name
-                        - source
-                        type: object
-                      type: array
-                  required:
-                  - name
-                  - prompt
-                  type: object
-                maxItems: 16
-                minItems: 1
-                type: array
+              templateRef:
+                description: TemplateRef references the AgentTeamTemplate to instantiate.
+                properties:
+                  name:
+                    description: Name of the AgentTeamTemplate in the same namespace.
+                    type: string
+                required:
+                - name
+                type: object
               workspace:
-                description: |-
-                  Workspace configures non-git inputs and outputs for Cowork teams.
-                  Use this for knowledge-work tasks (documents, reports, email, etc.).
+                description: Workspace configures inputs/outputs for this run (Cowork
+                  mode).
                 properties:
                   inputs:
                     description: Inputs are read-only volumes mounted into all agent
@@ -658,7 +400,7 @@ spec:
             required:
             - auth
             - lead
-            - teammates
+            - templateRef
             type: object
           status:
             description: AgentTeamStatus defines the observed state of an AgentTeam.

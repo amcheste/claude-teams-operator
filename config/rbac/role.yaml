@@ -47,7 +47,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - claude.amcheste.io
+  - kagents.dev
   resources:
   - agentteamruns
   - agentteams
@@ -61,7 +61,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - claude.amcheste.io
+  - kagents.dev
   resources:
   - agentteamruns/finalizers
   - agentteams/finalizers
@@ -69,7 +69,7 @@ rules:
   verbs:
   - update
 - apiGroups:
-  - claude.amcheste.io
+  - kagents.dev
   resources:
   - agentteamruns/status
   - agentteams/status

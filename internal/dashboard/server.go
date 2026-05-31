@@ -33,7 +33,7 @@ import (
 //
 // Both clients are swappable in tests via the exported fields.
 type Server struct {
-	// CRClient reads claude.amcheste.io/v1alpha1 resources.
+	// CRClient reads kagents.dev/v1alpha1 resources.
 	CRClient client.Client
 
 	// KubeClient streams pod logs via the typed clientset. Optional — when

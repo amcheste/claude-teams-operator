@@ -5,7 +5,7 @@ kubectl rollout status deployment/{{ .Release.Name }}-controller-manager \
   --namespace {{ .Release.Namespace }} --timeout=120s
 
 # 2. Confirm the CRDs are installed
-kubectl get crds | grep claude.amcheste.io
+kubectl get crds | grep kagents.dev
 
 # 3. Create your Anthropic API key secret (replace sk-ant-... with your key)
 kubectl create secret generic anthropic-api-key \
@@ -14,7 +14,7 @@ kubectl create secret generic anthropic-api-key \
 
 # 4. Apply your first AgentTeam
 kubectl apply -f - <<'YAML'
-apiVersion: claude.amcheste.io/v1alpha1
+apiVersion: kagents.dev/v1alpha1
 kind: AgentTeam
 metadata:
   name: hello-team
